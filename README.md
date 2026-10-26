@@ -40,6 +40,11 @@ vecteurs de mouvement, insertion avant le post-traitement), réimplémentée de 
 4. En jeu, ouvrir l'overlay ReShade → onglet **AK-FSR** (mode FSR actif par défaut).
 5. Désactiver les effets d'AA de ReShade (SMAA, FXAA) : ils s'appliqueraient après FSR, sur l'interface.
 
+Options expérimentales (branche `wip/m6-m10`, toutes désactivées par défaut, voir [TESTING.md](TESTING.md)) :
+touche on/off, hautes lumières hors FSR, insertion au SMAA du jeu, backend FSR 3 DX11 natif
+(`ak-fsr-dx11.dll` à copier aussi), vecteurs du jeu, biais de LOD, FSR 4 par le provider du pilote AMD
+(DLL AMD à placer dans `Binaries/Win64/ak-fsr/`).
+
 ### FSR 4 (optionnel, PC RDNA 4)
 
 Avec [OptiScaler](https://github.com/optiscaler/OptiScaler) nightly chargé dans le processus, la version
@@ -57,6 +62,7 @@ Compilation croisée vers Windows x64 avec `clang-cl`, `lld-link` et le SDK/CRT 
 git clone --recurse-submodules <ce dépôt>        # ou : git submodule update --init --recursive
 xwin --accept-license --cache-dir ~/.xwin-cache splat --output ~/.xwin
 scripts/fetch_ffx.sh                              # amd_fidelityfx_vk.dll (SDK v1.1.4, empreinte vérifiée)
+scripts/fetch_ffx_dx11.sh                         # facultatif : backend DX11 (M8.2) -> ak-fsr-dx11.dll
 cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/clang-cl-xwin.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 scripts/deploy.sh                                 # copie vers le dossier du jeu (AK_GAME_DIR pour le changer)
@@ -85,6 +91,12 @@ précompilés dans `src/shaders/` ; `scripts/build_shaders.sh` les régénère (
 - [ReShade](https://github.com/crosire/reshade) (crosire) — API d'addon, BSD-3-Clause.
 - [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (AMD) — FSR, MIT.
 - [DXVK](https://github.com/doitsujin/dxvk) — interfaces d'interop Vulkan, zlib.
+- [Luma Framework](https://github.com/Filoppi/Luma-Framework) (Filippo Tarpini et contributeurs, MIT) —
+  idées du §4.2 de PLAN.md (insertion au SMAA, vecteurs du jeu, biais de LOD, backend DX11) et bibliothèques
+  FidelityFX DX11 précompilées (© AMD, MIT) utilisées par `ak-fsr-dx11.dll` (`scripts/fetch_ffx_dx11.sh`).
+- [OptiScaler](https://github.com/optiscaler/OptiScaler) (GPL-3.0) et
+  [FSR4-Vulkan-Bridge](https://github.com/SemiRealProductions/FSR4-Vulkan-Bridge) — sources des faits
+  d'interface du provider FSR 4 du pilote AMD ; aucun code repris.
 - [RenoDX](https://github.com/clshortfuse/renodx) — référence pour les hashes de shaders et l'organisation
   d'un addon de remplacement, MIT.
 - Méthode inspirée du mod « Native DLSS Anti Aliasing for Arkham Knight » (Zorkanne33) ; aucun code ni
