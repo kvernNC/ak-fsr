@@ -162,3 +162,10 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   utilisé : …, shaders N dont M réécrits, 0 échecs ».
 - Si 4.1.2 échoue : ligne orange « FSR 4 pilote indisponible, repli sur FSR 3.1 : … » ; le menu reste
   utilisable pour revenir à 3.1.4.
+
+## Retour de test : bouton « Rapport de test »
+
+En bas de l'onglet, **« Rapport de test (fichier + presse-papiers) »** : copie dans le presse-papiers et ajoute à
+`Binaries/Win64/ak-fsr-report.txt` (et au log) tous les réglages, passes, ressources, états des options et
+mesures (CPU/GPU des deux backends). Le faire **après chaque test**, au même endroit du jeu, et me coller le
+fichier avec `ReShade.log`.

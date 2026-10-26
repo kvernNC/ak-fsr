@@ -15,10 +15,10 @@
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
-#include "vk_device_hook.hpp"
 #include "lod_bias.hpp"
 #include "passes.hpp"
 #include "vk_bridge.hpp"
+#include "vk_device_hook.hpp"
 #include "version.h"
 
 extern "C" __declspec(dllexport) const char *NAME = "AK-FSR";
@@ -107,6 +107,89 @@ void resource_row(const char *name, const akfsr::passes::found_resource &res) {
   ImGui::Text("    %s : %ux%u %s", name, res.desc.texture.width, res.desc.texture.height,
               akfsr::dump::format_string(res.desc.texture.format).c_str());
 }
+
+
+// Rapport de test : réglages, passes, états et mesures en texte, écrit à côté de l'addon et copié dans le
+// presse-papiers (à coller tel quel dans le retour de test).
+std::string build_report() {
+  std::string out;
+  char line[512];
+  auto add = [&](const char *fmt, auto... args) {
+    std::snprintf(line, sizeof(line), fmt, args...);
+    out += line;
+    out += '\n';
+  };
+  const auto st = akfsr::insertion::get_fsr_settings();
+  const auto info = akfsr::fsr::get_info();
+  const auto r = akfsr::passes::get_report();
+  const auto t = akfsr::vk::get_timings();
+  add("AK-FSR %s (%s), swapchain %ux%u format %u", AKFSR_VERSION, AKFSR_MILESTONE, g_swapchain.width,
+      g_swapchain.height, static_cast<uint32_t>(g_swapchain.format));
+  add("[réglages] Mode=%d coupé_par_touche=%d ToggleKey=%u Backend=%d Version=%llu Jitter=%d ShaderPatches=%d",
+      static_cast<int>(akfsr::insertion::get_mode()), akfsr::insertion::bypassed() ? 1 : 0,
+      akfsr::insertion::get_toggle_key(), static_cast<int>(st.fsr_backend),
+      static_cast<unsigned long long>(st.version_id), st.jitter ? 1 : 0, akfsr::passes::shader_patches_enabled() ? 1 : 0);
+  add("[réglages] ObjectVelocity=%d AutoExposure=%d Sharpness=%.2f PrevMatrix=%d Highlights=%d (%.1f) SmaaInsertion=%d",
+      st.object_velocity ? 1 : 0, st.auto_exposure ? 1 : 0, st.sharpness, static_cast<int>(st.prev_source),
+      st.highlights ? 1 : 0, st.highlight_threshold, st.smaa_insertion ? 1 : 0);
+  add("[réglages] GameMotionVectors=%d GameMvScale=%d GameMvFlipY=%d LodBias=%.2f Fsr4Driver=%d", st.game_mv ? 1 : 0,
+      st.game_mv_scale, st.game_mv_flip_y ? 1 : 0, st.lod_bias, st.fsr4_driver ? 1 : 0);
+  auto pass = [&](const char *name, const akfsr::passes::pass_status &p) {
+    add("[passe] %-12s %s 0x%08X trouvées %llu manquées %llu", name, p.found ? "OK" : "--", p.hash,
+        static_cast<unsigned long long>(p.frames_found), static_cast<unsigned long long>(p.frames_missed));
+  };
+  pass("insertion", r.insertion);
+  pass("SMAA", r.smaa);
+  pass("vélocité", r.velocity);
+  pass("CB View", r.view_cb);
+  pass("tonemap", r.tonemap);
+  auto res = [&](const char *name, const akfsr::passes::found_resource &x) {
+    add("[ressource] %-22s %ux%u %s", name, x.desc.texture.width, x.desc.texture.height,
+        x.handle != 0 ? akfsr::dump::format_string(x.desc.texture.format).c_str() : "-");
+  };
+  res("couleur HDR", r.scene_color);
+  res("profondeur insertion", r.insertion_depth);
+  res("RT4 vélocité objets", r.velocity_objects);
+  res("R16G16F effacée", r.cleared_rg16);
+  add("[ressource] R16G16F effacée == RT4 : %s", r.cleared_rg16.handle != 0 && r.cleared_rg16.handle == r.velocity_objects.handle ? "oui" : "non");
+  const char *smaa[] = {"option coupée", "FSR remplace le SMAA", "repli 0xB2A276FD", "désarmée"};
+  add("[M8.1] insertion au SMAA : %s, %llu frames", smaa[static_cast<int>(r.smaa_insertion)],
+      static_cast<unsigned long long>(r.smaa_fsr_frames));
+  add("[FSR] statut : %s | version utilisée : %s", info.status.c_str(), info.provider.c_str());
+  add("[FSR] FOV %.1f°, plan proche %.2f, jitter relu (%.3f, %.3f) px", info.fov_deg, info.near_plane, info.jitter_px_x,
+      info.jitter_px_y);
+  add("[Vulkan] interop : %s", akfsr::vk::status().c_str());
+  add("[Vulkan] CPU %.3f ms | GPU %.3f ms (préparation %.3f, FSR %.3f) | complet vu par D3D11 %.3f ms | %llu exécutions, %llu échecs",
+      t.flush_cpu_ms, t.gpu_ms, t.gpu_prepare_ms, t.gpu_fsr_ms, info.vulkan_total_gpu_ms,
+      static_cast<unsigned long long>(t.runs), static_cast<unsigned long long>(t.failures));
+  const auto gt = akfsr::fsr::dx11::get_gpu_timings();
+  add("[DX11] %s | CPU %.3f ms | GPU préparation %.3f, FSR %.3f, copie %.3f, total %.3f ms",
+      info.dx11_status.empty() ? "non lancé" : info.dx11_status.c_str(), info.dx11_cpu_ms, gt.prepare_ms, gt.fsr_ms,
+      gt.copy_ms, gt.prepare_ms + gt.fsr_ms + gt.copy_ms);
+  add("[M7.2] hautes lumières : %s", akfsr::highlights::status().c_str());
+  const auto lb = akfsr::lod_bias::get_stats();
+  add("[M8.4] biais de LOD en vigueur %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified, lb.skipped);
+  const auto hook = akfsr::vk_device_hook::get_status();
+  std::string added, missing;
+  for (const auto &a : hook.added) added += a + " ";
+  for (const auto &m : hook.missing) missing += m + " ";
+  add("[M10.2] device : %s | ajoutées : %s| absentes : %s", hook.message.c_str(), added.c_str(), missing.c_str());
+  const auto d = akfsr::fsr4::get_info();
+  add("[M10.2] provider : %s, « %s », id 0x%016llx, modèle %s (%s), shaders %u dont %u réécrits, %u échecs ; repli : %s",
+      d.tried ? d.status.c_str() : "non essayé", d.provider_name.c_str(), static_cast<unsigned long long>(d.provider_id),
+      d.model.empty() ? "?" : d.model.c_str(), d.model_seen.c_str(), d.shaders, d.shaders_rewritten, d.shader_failures,
+      info.fsr4_status.empty() ? "-" : info.fsr4_status.c_str());
+  const auto js = akfsr::jitter::get_status();
+  add("[jitter] %s", js.message.c_str());
+  for (const auto &c : js.callers)
+    add("[jitter] appelant 0x%07x %s, %llu appels", c.rva, c.main_view ? "VUE PRINCIPALE" : "autre",
+        static_cast<unsigned long long>(c.calls));
+  const auto ds = akfsr::dump::get_stats();
+  add("[frame] %u draws, %u dispatches, %zu shaders suivis", ds.draws, ds.dispatches, ds.shaders_known);
+  return out;
+}
+
+std::filesystem::path g_addon_dir;
 
 void on_overlay(reshade::api::effect_runtime *) {
   ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " (" AKFSR_MILESTONE " : FSR AA natif)");
@@ -317,6 +400,23 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (ImGui::Button(s.capture_busy ? "Capture en cours..." : "Capturer une frame (F10)")) akfsr::dump::request_capture();
   ImGui::EndDisabled();
   if (!s.last_capture.empty()) ImGui::TextWrapped("Dernière capture : %s", s.last_capture.c_str());
+  static std::string report_status;
+  if (ImGui::Button("Rapport de test (fichier + presse-papiers)")) {
+    const std::string text = build_report();
+    ImGui::SetClipboardText(text.c_str());
+    const auto path = g_addon_dir / "ak-fsr-report.txt";
+    FILE *f = nullptr;
+    if (_wfopen_s(&f, path.c_str(), L"ab") == 0 && f != nullptr) {
+      std::fwrite(text.data(), 1, text.size(), f);
+      std::fputs("----\n", f);
+      std::fclose(f);
+      report_status = "ajouté à " + path.string() + " et copié";
+    } else {
+      report_status = "copié (écriture de " + path.string() + " impossible)";
+    }
+    reshade::log::message(reshade::log::level::info, ("AK-FSR: rapport de test :\n" + text).c_str());
+  }
+  if (!report_status.empty()) ImGui::TextWrapped("Rapport : %s", report_status.c_str());
   static std::string image_dump;
   if (ImGui::Button("Écrire l'image mémoire du jeu (analyse M4)")) image_dump = akfsr::dump::dump_game_image();
   if (!image_dump.empty()) ImGui::TextWrapped("Image : %s", image_dump.c_str());
@@ -330,6 +430,7 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       if (!reshade::register_addon(module)) return FALSE;
       reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
       reshade::register_event<reshade::addon_event::reshade_present>(on_reshade_present);
+      g_addon_dir = module_dir(module);
       akfsr::dump::register_events(module_dir(module) / "ak-fsr-dumps");
       akfsr::passes::register_events();
       akfsr::insertion::register_events();
