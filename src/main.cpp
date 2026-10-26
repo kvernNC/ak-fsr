@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "frame_dump.hpp"
+#include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
 #include "passes.hpp"
@@ -190,6 +191,15 @@ void on_overlay(reshade::api::effect_runtime *) {
       }
       ImGui::EndCombo();
     }
+  }
+  fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR (M7)", &fsr_settings.highlights);
+  if (fsr_settings.highlights) {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(160);
+    fsr_changed |= ImGui::SliderFloat("seuil", &fsr_settings.highlight_threshold, 1.0f, 64.0f, "%.1f",
+                                      ImGuiSliderFlags_Logarithmic);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%s)", akfsr::highlights::status().c_str());
   }
   if (fsr_changed) akfsr::insertion::set_fsr_settings(fsr_settings);
   if (!fsr_info.provider.empty()) ImGui::Text("Version utilisée : %s", fsr_info.provider.c_str());

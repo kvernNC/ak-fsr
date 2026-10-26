@@ -15,6 +15,8 @@ add_library(ak-fsr SHARED
   src/fsr.cpp
   src/jitter.cpp
   src/shader_patch.cpp
+  src/d3d_compute.cpp
+  src/highlights.cpp
   src/ak-fsr.rc)
 target_include_directories(ak-fsr PRIVATE
   third_party/reshade/include

@@ -21,3 +21,17 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   dans l'onglet ; un second appui le réactive. Le mode choisi dans l'onglet n'est pas modifié.
 - Log : `AK-FSR: touche on/off : AK-FSR désactivé` / `… réactivé`.
 - Après redémarrage du jeu : AK-FSR toujours actif (la bascule n'est pas sauvegardée), la touche oui.
+
+## 2. M7.2 — Hautes lumières hors FSR
+
+- Option : case **« Hautes lumières hors FSR (M7) »** + curseur « seuil » (défaut 8) ;
+  `ReShade.ini` : `Highlights=1`, `HighlightThreshold=8.000000`.
+- Principe : la part de chaque pixel au-dessus du seuil (composante max, couleur HDR linéaire) est retirée
+  avant FSR et rajoutée après (CS D3D11 compilés à l'exécution par `d3dcompiler_47` de Proton).
+- Observer : néons, phares, reflets de pluie intenses en mouvement → moins de traînées et de « fantômes »
+  qu'avec l'option coupée. Inconvénient attendu : ces hautes lumières gardent l'aliasing / le jitter
+  (léger frémissement des points très brillants). Faire varier le seuil (2 → 32).
+- Coût : deux passes plein écran et deux copies ; comparer les fps avec la référence.
+- Log : `AK-FSR: hautes lumières : actif` à la première frame.
+  En cas d'échec : `hautes lumières : compilation des shaders : …`, `… sans UAV typée`, ou
+  `… SRV sur la couleur du jeu impossible` → l'image reste celle de FSR sans l'option (rien de cassé).

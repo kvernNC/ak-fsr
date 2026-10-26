@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include "dxvk_interop.hpp"
+#include "highlights.hpp"
 #include "jitter.hpp"
 #include "passes.hpp"
 #include "vk_bridge.hpp"
@@ -20,7 +21,10 @@ std::atomic<bool> g_bypass{false};
 std::mutex g_settings_mutex;
 fsr::settings g_fsr_settings;
 
-void on_destroy_device(device *) { vk::shutdown(); }
+void on_destroy_device(device *) {
+  highlights::shutdown();
+  vk::shutdown();
+}
 
 // Réglages persistants : section [AK-FSR] de ReShade.ini (configuration globale).
 constexpr const char *kSection = "AK-FSR";
@@ -36,6 +40,8 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
   reshade::set_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::set_config_value(nullptr, kSection, "ToggleKey", g_toggle_key.load());
+  reshade::set_config_value(nullptr, kSection, "Highlights", s.highlights);
+  reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
 void load_settings() {
@@ -51,6 +57,8 @@ void load_settings() {
   if (prev >= 0 && prev <= static_cast<int>(fsr::prev_matrix::memory)) s.prev_source = static_cast<fsr::prev_matrix>(prev);
   reshade::get_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::get_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
+  reshade::get_config_value(nullptr, kSection, "Highlights", s.highlights);
+  reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
     std::lock_guard lock(g_settings_mutex);
     g_fsr_settings = s;
@@ -95,7 +103,12 @@ void before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     in.depth = reinterpret_cast<ID3D11Resource *>(depth.handle);
     in.velocity = reinterpret_cast<ID3D11Resource *>(velocity.handle);
     in.view = *view_cb;
-    fsr::run(in, get_fsr_settings());  // les échecs sont journalisés par fsr
+    const fsr::settings s = get_fsr_settings();
+    auto *native = reinterpret_cast<ID3D11Device *>(dev->get_native());
+    auto *imm = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
+    const bool split = s.highlights && highlights::extract(native, imm, color, s.highlight_threshold);
+    fsr::run(in, s);  // les échecs sont journalisés par fsr
+    if (split) highlights::reinject(native, imm, color);  // aussi après un échec : couleur d'origine rétablie
     return;
   }
 

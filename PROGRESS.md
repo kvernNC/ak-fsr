@@ -6,3 +6,4 @@ Branche de travail autonome (pas de push). Un commit par sous-étape ; procédur
 | Étape | État | Option (défaut : désactivée) |
 |---|---|---|
 | M7.1 touche on/off | codé, à tester | `ToggleKey` |
+| M7.2 hautes lumières hors FSR | codé, à tester | `Highlights`, `HighlightThreshold` |

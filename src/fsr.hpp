@@ -30,6 +30,8 @@ struct settings {
   bool jitter = true;           // jitter de la projection (M4)
   prev_matrix prev_source = prev_matrix::automatic;  // ViewProj précédente pour les vecteurs de mouvement
   bool object_velocity = true;  // vélocité des objets du G-buffer (RT4, M5)
+  bool highlights = false;        // M7 : hautes lumières sorties de FSR puis rajoutées
+  float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
 };
 
 struct frame_inputs {
