@@ -63,6 +63,7 @@ struct info {
   float prev_mismatch = -1;                // écart max entre ViewProj précédente du CB et mémorisée (-1 : n/a)
   bool prev_from_memory = false;
   std::string dx11_status;  // M8.2 : état du backend DX11
+  double vulkan_total_gpu_ms = 0;  // chemin Vulkan complet vu par D3D11 (copies, flush et FSR compris)
   std::string fsr4_status;  // M10.2 : FSR 4 pilote demandé mais indisponible (repli), vide sinon
   double dx11_cpu_ms = 0;
 };

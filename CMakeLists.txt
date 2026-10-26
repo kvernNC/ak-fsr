@@ -16,6 +16,7 @@ add_library(ak-fsr SHARED
   src/jitter.cpp
   src/shader_patch.cpp
   src/d3d_compute.cpp
+  src/gpu_timer.cpp
   src/highlights.cpp
   src/fsr_dx11.cpp
   src/lod_bias.cpp

@@ -17,4 +17,11 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
          std::string &error);
 void shutdown();
 
+// Durées GPU mesurées par requêtes timestamp D3D11 (résultats lus avec quelques frames de retard).
+struct gpu_timings {
+  double prepare_ms = 0, fsr_ms = 0, copy_ms = 0;  // préparation, FSR, copie du résultat
+  bool valid = false;
+};
+gpu_timings get_gpu_timings();
+
 }  // namespace akfsr::fsr::dx11

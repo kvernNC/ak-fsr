@@ -74,9 +74,12 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   mis de côté pendant le travail (`SwapDeviceContextState`).
 - Observer : onglet « Version utilisée : 3.1 (backend DX11 natif) », « Backend DX11 : actif | CPU x ms ».
   Image équivalente au backend Vulkan (comparer à l'arrêt et en mouvement, avec et sans jitter).
-  Les temps GPU « préparation / FSR » de l'onglet ne concernent que le backend Vulkan : comparer les **fps**
-  (et l'overlay de performance du Deck) entre `Backend=0` et `Backend=1`, au même endroit.
-  Critère : coût inférieur au chemin Vulkan sur le Deck.
+  Comparer au même endroit, caméra immobile :
+  - `Backend=0` : ligne « chemin Vulkan complet vu par D3D11 (copies + FSR) : X ms » ;
+  - `Backend=1` : ligne « GPU : préparation … | FSR … | copie … | total Y ms ».
+  Ces deux totaux sont comparables (mêmes requêtes timestamp D3D11 ; le total Vulkan inclut aussi l'attente
+  éventuelle du GPU pendant le flush, c'est un majorant). Relever aussi les **fps** et l'overlay du Deck.
+  Critère : Y < X sur le Deck.
 - Log attendu : `backend DX11 : ak-fsr-dx11.dll chargée`, puis
   `backend DX11 : contexte FSR 3 créé : WxH (AA natif), format DXGI 26`.
 - Échecs possibles (image sans AA, rien de cassé ; repasser à `Backend=0`) :

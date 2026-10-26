@@ -11,6 +11,7 @@
 
 #include "frame_dump.hpp"
 #include "fsr4_driver.hpp"
+#include "fsr_dx11.hpp"
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
@@ -271,9 +272,14 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (!fsr_info.fsr4_status.empty())
     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 pilote indisponible, repli sur FSR 3.1 : %s",
                        fsr_info.fsr4_status.c_str());
-  if (fsr_settings.fsr_backend == akfsr::fsr::backend::dx11)
+  if (fsr_settings.fsr_backend == akfsr::fsr::backend::dx11) {
     ImGui::Text("Backend DX11 : %s | CPU %.3f ms", fsr_info.dx11_status.empty() ? "pas encore lancé" :
                 fsr_info.dx11_status.c_str(), fsr_info.dx11_cpu_ms);
+    const auto gt = akfsr::fsr::dx11::get_gpu_timings();
+    if (gt.valid)
+      ImGui::Text("  GPU : préparation %.3f ms | FSR %.3f ms | copie %.3f ms | total %.3f ms", gt.prepare_ms, gt.fsr_ms,
+                  gt.copy_ms, gt.prepare_ms + gt.fsr_ms + gt.copy_ms);
+  }
   if (fsr_info.prev_mismatch >= 0)
     ImGui::Text("Écart ViewProj précédente CB / mémorisée : %.6f (utilisée : %s)", fsr_info.prev_mismatch,
                 fsr_info.prev_from_memory ? "mémorisée" : "CB");
@@ -295,6 +301,8 @@ void on_overlay(reshade::api::effect_runtime *) {
   const auto t = akfsr::vk::get_timings();
   ImGui::Text("CPU (copies+flush+soumission) : %.3f ms | GPU : %.3f ms", t.flush_cpu_ms, t.gpu_ms);
   ImGui::Text("  dont GPU préparation : %.3f ms | FSR : %.3f ms", t.gpu_prepare_ms, t.gpu_fsr_ms);
+  if (fsr_info.vulkan_total_gpu_ms > 0)
+    ImGui::Text("  chemin Vulkan complet vu par D3D11 (copies + FSR) : %.3f ms", fsr_info.vulkan_total_gpu_ms);
   ImGui::Text("Exécutions : %llu | échecs : %llu", static_cast<unsigned long long>(t.runs),
               static_cast<unsigned long long>(t.failures));
 

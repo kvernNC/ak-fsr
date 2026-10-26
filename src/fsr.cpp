@@ -14,6 +14,7 @@
 #include "fsr4_driver.hpp"
 #include "fsr_dx11.hpp"
 #include "fsr_params.hpp"
+#include "gpu_timer.hpp"
 #include "jitter.hpp"
 #include "shaders/fsr_prepare.spv.h"
 #include "vk_bridge.hpp"
@@ -68,6 +69,7 @@ struct history {
 
 std::mutex g_info_mutex;
 info g_info;
+d3d::gpu_timer g_total_timer;  // chemin Vulkan complet, mesuré côté D3D11
 
 void set_fsr_status(const std::string &s, bool failure) {
   {
@@ -223,6 +225,7 @@ void destroy_frame_resources() {
 
 void destroy_all() {
   destroy_frame_resources();
+  g_total_timer.release();
   const VkDevice dev = ctx().device;
   if (g.pool != VK_NULL_HANDLE) fn.vkDestroyDescriptorPool(dev, g.pool, nullptr);
   if (g.pipeline != VK_NULL_HANDLE) fn.vkDestroyPipeline(dev, g.pipeline, nullptr);
@@ -638,13 +641,20 @@ bool run(const frame_inputs &in, const settings &s) {
 
   // 1) Entrées du jeu -> nos images partagées (copies par DXVK).
   ID3D11DeviceContext *imm = ctx().immediate;
+  g_total_timer.begin(ctx().d3d, imm);
   imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
   imm->CopySubresourceRegion(g.depth_src.texture, 0, 0, 0, 0, in.depth, 0, nullptr);
   if (objects) imm->CopySubresourceRegion(g.velocity_src.texture, 0, 0, 0, 0, in.velocity, 0, nullptr);
-  if (!flush_dxvk()) return false;
+  if (!flush_dxvk()) {
+    g_total_timer.end(imm);
+    return false;
+  }
 
   VkCommandBuffer cmd = begin_commands();
-  if (cmd == VK_NULL_HANDLE) return false;
+  if (cmd == VK_NULL_HANDLE) {
+    g_total_timer.end(imm);
+    return false;
+  }
   memory_barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                  VK_ACCESS_MEMORY_READ_BIT);
   mark(cmd, 0);
@@ -705,8 +715,12 @@ bool run(const frame_inputs &in, const settings &s) {
                           nullptr, 1, &back);
   memory_barrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_ACCESS_MEMORY_WRITE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                  VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT);
-  if (!submit_commands(cmd, t0)) return false;
+  if (!submit_commands(cmd, t0)) {
+    g_total_timer.end(imm);
+    return false;
+  }
   if (rc != FFX_API_RETURN_OK) {
+    g_total_timer.end(imm);
     // Le command buffer a été soumis (barrières seules) : la couleur du jeu n'est pas touchée.
     set_fsr_status("ffxDispatch : code " + std::to_string(rc), true);
     return false;
@@ -714,6 +728,11 @@ bool run(const frame_inputs &in, const settings &s) {
 
   // 4) Résultat -> couleur du jeu.
   imm->CopySubresourceRegion(in.output != nullptr ? in.output : in.color, 0, 0, 0, 0, g.color_out.texture, 0, nullptr);
+  g_total_timer.end(imm);
+  {
+    std::lock_guard lock(g_info_mutex);
+    g_info.vulkan_total_gpu_ms = g_total_timer.last_ms();
+  }
   set_fsr_status(p.have_reproj ? "actif" : "actif (matrice non inversible : vecteurs nuls)", false);
   return true;
 }

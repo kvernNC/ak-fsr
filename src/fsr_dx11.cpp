@@ -5,6 +5,7 @@
 #include <cfloat>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 
 #include <reshade.hpp>
 
@@ -70,7 +71,43 @@ struct state {
   UINT width = 0, height = 0;
   ID3D11Texture2D *depth = nullptr, *motion = nullptr, *output = nullptr;
   ID3D11UnorderedAccessView *depth_uav = nullptr, *motion_uav = nullptr;
+  // Requêtes de mesure : disjoint + 4 timestamps (début, fin préparation, fin FSR, fin copie), en anneau.
+  struct query_set {
+    ID3D11Query *disjoint = nullptr;
+    ID3D11Query *stamp[4] = {};
+    bool pending = false;
+  } queries[4];
+  uint32_t query_index = 0;
+  bool queries_tried = false, queries_ok = false;
 } g;
+
+std::mutex g_timing_mutex;
+gpu_timings g_timings;
+
+void create_queries(ID3D11Device *dev) {
+  D3D11_QUERY_DESC disjoint{D3D11_QUERY_TIMESTAMP_DISJOINT, 0}, stamp{D3D11_QUERY_TIMESTAMP, 0};
+  g.queries_ok = true;
+  for (auto &q : g.queries) {
+    g.queries_ok &= SUCCEEDED(dev->CreateQuery(&disjoint, &q.disjoint));
+    for (auto *&s : q.stamp) g.queries_ok &= SUCCEEDED(dev->CreateQuery(&stamp, &s));
+  }
+}
+
+// Lit sans attendre le jeu de requêtes qui va être réutilisé (émis 4 frames plus tôt).
+template <typename QuerySet>
+void collect(ID3D11DeviceContext *ctx, QuerySet &q) {
+  if (!q.pending) return;
+  D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint{};
+  UINT64 t[4] = {};
+  if (ctx->GetData(q.disjoint, &disjoint, sizeof(disjoint), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) return;
+  for (int i = 0; i < 4; ++i)
+    if (ctx->GetData(q.stamp[i], &t[i], sizeof(t[i]), D3D11_ASYNC_GETDATA_DONOTFLUSH) != S_OK) return;
+  q.pending = false;
+  if (disjoint.Disjoint || disjoint.Frequency == 0) return;
+  const double to_ms = 1000.0 / static_cast<double>(disjoint.Frequency);
+  std::lock_guard lock(g_timing_mutex);
+  g_timings = {(t[1] - t[0]) * to_ms, (t[2] - t[1]) * to_ms, (t[3] - t[2]) * to_ms, true};
+}
 
 template <typename T>
 void release(T *&p) {
@@ -260,6 +297,17 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
   }
   int rc = 0;
   if (ok) {
+    if (!g.queries_tried) {
+      g.queries_tried = true;
+      create_queries(dev);
+    }
+    auto &q = g.queries[g.query_index++ % 4];
+    if (g.queries_ok) {
+      collect(imm1, q);
+      imm1->Begin(q.disjoint);
+      imm1->End(q.stamp[0]);
+    }
+
     // État D3D11 du jeu mis de côté : FidelityFX lie librement ses ressources.
     ID3DDeviceContextState *game_state = nullptr;
     imm1->SwapDeviceContextState(g.our_state, &game_state);
@@ -280,6 +328,7 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
     ID3D11UnorderedAccessView *no_uav[2] = {};
     imm1->CSSetShaderResources(0, 2, no_srv);
     imm1->CSSetUnorderedAccessViews(0, 2, no_uav, nullptr);
+    if (g.queries_ok) imm1->End(q.stamp[1]);
 
     akfsr_dx11_dispatch_desc d{};
     d.context = imm1;
@@ -300,6 +349,7 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
     d.meters_per_unit = 0.01f;
     d.debug_view = s.debug_view ? 1u : 0u;
     rc = b.dispatch(g.context, &d);
+    if (g.queries_ok) imm1->End(q.stamp[2]);
 
     imm1->SwapDeviceContextState(game_state, nullptr);
     if (game_state != nullptr) game_state->Release();
@@ -308,6 +358,11 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
     } else {
       error = "dispatch FSR : code " + std::to_string(rc);
       ok = false;
+    }
+    if (g.queries_ok) {
+      imm1->End(q.stamp[3]);
+      imm1->End(q.disjoint);
+      q.pending = true;
     }
   }
   release(depth_src);
@@ -318,7 +373,16 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
   return ok;
 }
 
+gpu_timings get_gpu_timings() {
+  std::lock_guard lock(g_timing_mutex);
+  return g_timings;
+}
+
 void shutdown() {
+  for (auto &q : g.queries) {
+    release(q.disjoint);
+    for (auto *&s : q.stamp) release(s);
+  }
   release_textures();
   release(g.prepare);
   release(g.cb);
