@@ -36,10 +36,12 @@ struct ps_state {
 // M8.1 : option (copie atomique des réglages) ; désarmé après un échec, jusqu'au prochain changement.
 std::atomic<bool> g_smaa_option{false};
 std::atomic<bool> g_smaa_disarmed{false};
+// CB View déjà capturé : il n'est appris qu'à la passe d'insertion ou de vélocité, après le SMAA dans la frame.
+std::atomic<bool> g_view_known{false};
 
 bool smaa_insertion_armed() {
   return g_smaa_option.load(std::memory_order_relaxed) && !g_smaa_disarmed.load(std::memory_order_relaxed) &&
-         insertion::fsr_active();
+         g_view_known.load(std::memory_order_relaxed) && insertion::fsr_active();
 }
 
 struct frame_flags {
@@ -216,17 +218,20 @@ bool replace_smaa(command_list *cmd, device *dev) {
                   edge_depth ? "de SMAAEdgeDetection" : "de l'insertion 0xB2A276FD");
     reshade::log::message(reshade::log::level::info, buf);
   }
-  bool ok = color.handle != 0 && output.handle != 0 && depth.handle != 0 && view_valid &&
-            insertion::before_post_pass(cmd, resource{color.handle}, resource{depth.handle},
-                                        resource{previous_velocity()}, &view, resource{output.handle});
-  if (ok) {
+  // Entrées pas encore connues (début de partie, retour de vidéo) : repli pour cette frame seulement.
+  const bool ready = color.handle != 0 && output.handle != 0 && depth.handle != 0 && view_valid;
+  if (ready && insertion::before_post_pass(cmd, resource{color.handle}, resource{depth.handle},
+                                           resource{previous_velocity()}, &view, resource{output.handle})) {
     g_current.fsr_done = true;
     return true;
   }
-  // Échec : sortie = entrée (sans AA) si possible, puis FSR au point d'insertion habituel ; désarmé.
-  g_smaa_disarmed = true;
-  reshade::log::message(reshade::log::level::warning,
-                        "AK-FSR: insertion au SMAA en échec, repli sur 0xB2A276FD (option désarmée)");
+  // Échec de FSR : désarmé. Dans les deux cas, sortie = entrée (sans AA) si possible, puis FSR au point
+  // d'insertion habituel.
+  if (ready) {
+    g_smaa_disarmed = true;
+    reshade::log::message(reshade::log::level::warning,
+                          "AK-FSR: insertion au SMAA en échec, repli sur 0xB2A276FD (option désarmée)");
+  }
   if (!g_current.smaa_skipped) return false;  // SMAA complet : on le laisse tourner
   if (color.handle != 0 && output.handle != 0 && color.desc.texture.format == output.desc.texture.format &&
       color.desc.texture.width == output.desc.texture.width && color.desc.texture.height == output.desc.texture.height) {
@@ -297,6 +302,7 @@ void on_unmap_buffer(device *, resource res) {
   std::lock_guard lock(g_view_mutex);
   std::memcpy(g_view_head.data(), t_view_cb_mapped, sizeof(g_view_head));
   g_view_valid = true;
+  g_view_known = true;
   t_view_cb_mapped = nullptr;
 }
 
@@ -307,6 +313,7 @@ bool on_update_buffer(device *, const void *data, resource dst, uint64_t offset,
   std::lock_guard lock(g_view_mutex);
   std::memcpy(g_view_head.data(), data, sizeof(g_view_head));
   g_view_valid = true;
+  g_view_known = true;
   return false;
 }
 
