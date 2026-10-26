@@ -8,6 +8,7 @@ Branche de travail autonome (pas de push). Un commit par sous-étape ; procédur
 | M7.1 touche on/off | codé, à tester | `ToggleKey` |
 | M7.2 hautes lumières hors FSR | codé, à tester | `Highlights`, `HighlightThreshold` |
 | M7.3 RCAS après tonemap, pluie | bloqué (documenté) | — |
+| M8.1 insertion au SMAA du jeu | codé, à tester | `SmaaInsertion` |
 
 ## Blocages
 

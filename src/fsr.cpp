@@ -453,6 +453,19 @@ bool run(const frame_inputs &in, const settings &s) {
   D3D11_TEXTURE2D_DESC desc;
   color_tex->GetDesc(&desc);
   color_tex->Release();
+  if (in.output != nullptr && in.output != in.color) {
+    ID3D11Texture2D *out_tex = nullptr;
+    if (FAILED(in.output->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&out_tex)))) return false;
+    D3D11_TEXTURE2D_DESC out_desc;
+    out_tex->GetDesc(&out_desc);
+    out_tex->Release();
+    if (out_desc.Format != desc.Format || out_desc.Width != desc.Width || out_desc.Height != desc.Height) {
+      set_fsr_status("sortie incompatible avec l'entrée (format " + std::to_string(out_desc.Format) + " / " +
+                         std::to_string(desc.Format) + ")",
+                     true);
+      return false;
+    }
+  }
   if (!ensure_images(desc.Format, desc.Width, desc.Height) || !ensure_context(s)) return false;
 
   const double t0 = now_ms();
@@ -607,7 +620,7 @@ bool run(const frame_inputs &in, const settings &s) {
   }
 
   // 4) Résultat -> couleur du jeu.
-  imm->CopySubresourceRegion(in.color, 0, 0, 0, 0, g.color_out.texture, 0, nullptr);
+  imm->CopySubresourceRegion(in.output != nullptr ? in.output : in.color, 0, 0, 0, 0, g.color_out.texture, 0, nullptr);
   set_fsr_status(have_reproj ? "actif" : "actif (matrice non inversible : vecteurs nuls)", false);
   return true;
 }

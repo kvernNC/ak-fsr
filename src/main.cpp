@@ -120,7 +120,13 @@ void on_overlay(reshade::api::effect_runtime *) {
   pass_row("Insertion (DoF/bloom)", r.insertion);
   resource_row("couleur HDR (t1)", r.scene_color);
   resource_row("profondeur (t0)", r.insertion_depth);
-  pass_row("Brouillard (optionnelle)", r.fog);
+  pass_row("SMAA du jeu (optionnelle)", r.smaa);
+  {
+    const char *names[] = {"option coupée", "FSR remplace le SMAA", "repli sur 0xB2A276FD (SMAA absent)",
+                           "désarmée après un échec (voir log)"};
+    ImGui::Text("    insertion au SMAA (M8.1) : %s, %llu frames", names[static_cast<int>(r.smaa_insertion)],
+                static_cast<unsigned long long>(r.smaa_fsr_frames));
+  }
   pass_row("Vélocité (motion blur)", r.velocity);
   resource_row("profondeur (t0)", r.depth);
   resource_row("vélocité objets (t1)", r.velocity_objects);
@@ -191,6 +197,10 @@ void on_overlay(reshade::api::effect_runtime *) {
       }
       ImGui::EndCombo();
     }
+  }
+  if (ImGui::Checkbox("Insertion au SMAA du jeu (M8.1, AA du jeu sur Élevé)", &fsr_settings.smaa_insertion)) {
+    fsr_changed = true;
+    akfsr::passes::rearm_smaa_insertion();
   }
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR (M7)", &fsr_settings.highlights);
   if (fsr_settings.highlights) {

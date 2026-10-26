@@ -41,3 +41,24 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - RCAS : déjà disponible via le curseur « Netteté (RCAS) » (`Sharpness`, RCAS intégré à FSR).
 - Pluie composée après l'AA : non codée (passes de pluie non identifiées). Pour débloquer : sous la pluie,
   en ville, faire une capture **F10** avec AK-FSR en mode Off et me fournir le dossier `ak-fsr-dumps/…`.
+
+## 4. M8.1 — FSR à la place du SMAA du jeu
+
+- Prérequis : **AA du jeu sur « Élevé »** (SMAA) dans les options graphiques.
+- Option : case **« Insertion au SMAA du jeu (M8.1…) »** ; `ReShade.ini` : `SmaaInsertion=1`.
+- Principe : `SMAAEdgeDetection` (PS `0x067FF80F`) et `SMAABlendingWeightCalculation` (PS `0x2F55F98E`)
+  sont sautées ; FSR remplace `SMAANeighborhoodBlending` (CS `0x42C0137E`, t0 → u0). Sans SMAA dans la
+  frame (AA du jeu coupé), FSR tourne comme avant à `0xB2A276FD`.
+- Observer dans l'onglet : ligne « SMAA du jeu » `[OK]`, puis « insertion au SMAA (M8.1) : FSR remplace le
+  SMAA, N frames » (N augmente). Image : même qualité que la référence (pas de double AA, pas de flou en plus).
+  Comparer les fps avec : (a) référence AA du jeu coupé, (b) référence AA du jeu « Élevé » sans l'option.
+  Gain attendu : le coût du SMAA du jeu.
+- Tester aussi : couper l'AA du jeu en cours de partie → l'état passe à « repli sur 0xB2A276FD »,
+  l'image reste anti-aliasée.
+- Log attendu (une fois) : `AK-FSR: passe SMAA du jeu (0x42C0137E, optionnelle) trouvée`, puis
+  `AK-FSR: insertion au SMAA : couleur <fmt> WxH -> sortie <fmt>, profondeur de SMAAEdgeDetection`.
+  **Me transmettre cette ligne** (formats réels). Si `profondeur de l'insertion 0xB2A276FD` : la SRV1 du
+  PS n'a pas le format attendu, c'est sans gravité.
+- En cas d'échec : `insertion au SMAA en échec, repli sur 0xB2A276FD (option désarmée)` précédé d'une
+  ligne `FSR : …` (ex. `sortie incompatible avec l'entrée (format X / Y)`). L'onglet affiche « désarmée » ;
+  décocher/recocher l'option pour réessayer.

@@ -32,12 +32,14 @@ struct settings {
   bool object_velocity = true;  // vélocité des objets du G-buffer (RT4, M5)
   bool highlights = false;        // M7 : hautes lumières sorties de FSR puis rajoutées
   float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
+  bool smaa_insertion = false;    // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
 };
 
 struct frame_inputs {
   ID3D11Resource *color = nullptr;  // HDR r11g11b10, réécrite avec le résultat
   ID3D11Resource *depth = nullptr;  // D32_FLOAT_S8X24 (typeless)
   ID3D11Resource *velocity = nullptr;  // RT4 du G-buffer (r16g16_float, UV préc. - UV cour., jitterée)
+  ID3D11Resource *output = nullptr;    // destination du résultat (nullptr : `color`) ; même format et taille
   view_data view{};                 // CB View c0..c21 (voir kViewFloats)
 };
 

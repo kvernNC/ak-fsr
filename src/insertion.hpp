@@ -17,10 +17,14 @@ enum class mode : int { off = 0, roundtrip = 1, mirror_half = 2, fsr = 3 };
 void register_events();
 void unregister_events();
 
-// Appelé par passes.cpp sur le contexte immédiat, avant que le dispatch ne soit transmis.
-void before_post_pass(reshade::api::command_list *cmd, reshade::api::resource scene_color,
+// Appelé par passes.cpp sur le contexte immédiat, avant que le dispatch ne soit transmis. `output` :
+// destination du résultat (0 : en place dans scene_color). true si FSR a écrit son résultat.
+bool before_post_pass(reshade::api::command_list *cmd, reshade::api::resource scene_color,
                       reshade::api::resource depth, reshade::api::resource velocity,
-                      const fsr::view_data *view_cb);
+                      const fsr::view_data *view_cb, reshade::api::resource output = {0});
+
+// Mode FSR effectif (ni Off, ni coupé par la touche) : les passes du jeu peuvent être remplacées.
+bool fsr_active();
 
 mode get_mode();
 void set_mode(mode m);

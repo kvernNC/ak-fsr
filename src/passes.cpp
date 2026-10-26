@@ -27,8 +27,25 @@ struct cs_state {
 std::atomic<command_list *> g_immediate{nullptr};
 cs_state g_cs;  // accédé uniquement depuis le thread du contexte immédiat
 
+// Pixel shader courant (M8.1 : passes SMAA du jeu), même règle d'accès.
+struct ps_state {
+  uint32_t hash = 0;
+  uint64_t srv1 = 0;
+} g_ps;
+
+// M8.1 : désarmé après un échec, jusqu'au prochain changement de l'option.
+std::atomic<bool> g_smaa_disarmed{false};
+
+bool smaa_insertion_armed() {
+  return !g_smaa_disarmed.load(std::memory_order_relaxed) && insertion::fsr_active() &&
+         insertion::get_fsr_settings().smaa_insertion;
+}
+
 struct frame_flags {
-  bool insertion = false, fog = false, velocity = false, view_cb = false, tonemap = false;
+  bool insertion = false, smaa = false, velocity = false, view_cb = false, tonemap = false;
+  bool fsr_done = false;      // FSR a déjà tourné cette frame (au SMAA, M8.1)
+  bool smaa_skipped = false;  // passes SMAA du jeu sautées cette frame
+  uint64_t edge_depth = 0;    // profondeur lue par SMAAEdgeDetection (t1)
   uint32_t tonemap_hash = 0;
 } g_current;
 
@@ -67,13 +84,32 @@ void update_status(pass_status &s, bool found_now, const char *name) {
 }
 
 void on_bind_pipeline(command_list *cmd, pipeline_stage stages, pipeline p) {
-  if ((stages & pipeline_stage::compute_shader) == 0 || !is_immediate(cmd)) return;
-  g_cs.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
+  if (!is_immediate(cmd)) return;
+  if ((stages & pipeline_stage::compute_shader) != 0) g_cs.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
+  if ((stages & pipeline_stage::pixel_shader) != 0) g_ps.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
+}
+
+// M8.1 : SMAAEdgeDetection et SMAABlendingWeightCalculation sont sautées quand FSR remplace le SMAA.
+bool skip_smaa_draw() {
+  if (g_ps.hash != kSmaaEdgePs && g_ps.hash != kSmaaWeightsPs) return false;
+  if (g_ps.hash == kSmaaEdgePs) g_current.edge_depth = g_ps.srv1;
+  if (!smaa_insertion_armed()) return false;
+  g_current.smaa_skipped = true;
+  return true;
+}
+
+bool on_draw(command_list *cmd, uint32_t, uint32_t, uint32_t, uint32_t) { return is_immediate(cmd) && skip_smaa_draw(); }
+bool on_draw_indexed(command_list *cmd, uint32_t, uint32_t, uint32_t, int32_t, uint32_t) {
+  return is_immediate(cmd) && skip_smaa_draw();
 }
 
 void on_push_descriptors(command_list *cmd, shader_stage stages, pipeline_layout, uint32_t,
                          const descriptor_table_update &update) {
-  if ((stages & shader_stage::compute) == 0 || !is_immediate(cmd)) return;
+  if (!is_immediate(cmd)) return;
+  if ((stages & shader_stage::pixel) != 0 && update.type == descriptor_type::shader_resource_view &&
+      update.binding <= 1 && update.binding + update.count > 1)
+    g_ps.srv1 = static_cast<const resource_view *>(update.descriptors)[1 - update.binding].handle;
+  if ((stages & shader_stage::compute) == 0) return;
   for (uint32_t i = 0; i < update.count; ++i) {
     const uint32_t slot = update.binding + i;
     switch (update.type) {
@@ -135,6 +171,70 @@ void bind_jitter_cb(device *dev, command_list *cmd) {
   ctx->CSSetConstantBuffers(shader_patch::kJitterCbSlot, 1, &g_jitter_cb);
 }
 
+uint64_t previous_velocity() {
+  std::lock_guard lock(g_report_mutex);
+  // Seulement si la passe de vélocité a tourné à la frame précédente : après une vidéo ou un chargement,
+  // la texture a pu être détruite (pointeur pendant -> crash au retour en jeu).
+  return g_report.velocity.found ? g_report.velocity_objects.handle : 0;
+}
+
+// M8.1 : FSR à la place de SMAANeighborhoodBlending (t0 couleur linéaire -> u0). true : dispatch sauté.
+bool replace_smaa(command_list *cmd, device *dev) {
+  const auto color = resolve_view(dev, g_cs.srv[0]);
+  const auto output = resolve_view(dev, g_cs.uav[0]);
+  // Profondeur : celle de SMAAEdgeDetection si elle a le format de celle de l'insertion habituelle.
+  found_resource depth;
+  {
+    std::lock_guard lock(g_report_mutex);
+    depth = g_report.insertion_depth;
+  }
+  bool edge_depth = false;
+  if (g_current.edge_depth != 0) {
+    const auto edge = resolve_view(dev, g_current.edge_depth);
+    if (edge.handle != 0 && (depth.handle == 0 || edge.desc.texture.format == depth.desc.texture.format)) {
+      depth = edge;
+      edge_depth = true;
+    }
+  }
+  fsr::view_data view{};
+  bool view_valid;
+  {
+    std::lock_guard lock(g_view_mutex);
+    view = g_view_head;
+    view_valid = g_view_valid;
+  }
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    char buf[200];
+    std::snprintf(buf, sizeof(buf), "AK-FSR: insertion au SMAA : couleur %s %ux%u -> sortie %s, profondeur %s",
+                  dump::format_string(color.desc.texture.format).c_str(), color.desc.texture.width,
+                  color.desc.texture.height, dump::format_string(output.desc.texture.format).c_str(),
+                  edge_depth ? "de SMAAEdgeDetection" : "de l'insertion 0xB2A276FD");
+    reshade::log::message(reshade::log::level::info, buf);
+  }
+  bool ok = color.handle != 0 && output.handle != 0 && depth.handle != 0 && view_valid &&
+            insertion::before_post_pass(cmd, resource{color.handle}, resource{depth.handle},
+                                        resource{previous_velocity()}, &view, resource{output.handle});
+  if (ok) {
+    g_current.fsr_done = true;
+    return true;
+  }
+  // Échec : sortie = entrée (sans AA) si possible, puis FSR au point d'insertion habituel ; désarmé.
+  g_smaa_disarmed = true;
+  reshade::log::message(reshade::log::level::warning,
+                        "AK-FSR: insertion au SMAA en échec, repli sur 0xB2A276FD (option désarmée)");
+  if (!g_current.smaa_skipped) return false;  // SMAA complet : on le laisse tourner
+  if (color.handle != 0 && output.handle != 0 && color.desc.texture.format == output.desc.texture.format &&
+      color.desc.texture.width == output.desc.texture.width && color.desc.texture.height == output.desc.texture.height) {
+    reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native())
+        ->CopySubresourceRegion(reinterpret_cast<ID3D11Resource *>(output.handle), 0, 0, 0, 0,
+                                reinterpret_cast<ID3D11Resource *>(color.handle), 0, nullptr);
+    return true;
+  }
+  return false;  // SMAA avec des poids périmés pendant une frame
+}
+
 bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   if (!is_immediate(cmd) || g_cs.hash == 0) return false;
   device *dev = cmd->get_device();
@@ -158,17 +258,13 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
       view_valid = g_view_valid && g_view_cb_handle.load() == g_cs.cb1;
     }
     // RT4 du G-buffer (vélocité des objets), repérée comme t1 de la passe de vélocité à la frame précédente.
-    uint64_t velocity;
-    {
-      std::lock_guard lock(g_report_mutex);
-      // Seulement si la passe de vélocité a tourné à la frame précédente : après une vidéo ou un chargement,
-      // la texture a pu être détruite (pointeur pendant -> crash au retour en jeu).
-      velocity = g_report.velocity.found ? g_report.velocity_objects.handle : 0;
-    }
-    insertion::before_post_pass(cmd, resource{color.handle}, resource{depth.handle}, resource{velocity},
-                                view_valid ? &view : nullptr);
-  } else if (g_cs.hash == kFogCs) {
-    g_current.fog = true;
+    const uint64_t velocity = previous_velocity();
+    if (!g_current.fsr_done)
+      insertion::before_post_pass(cmd, resource{color.handle}, resource{depth.handle}, resource{velocity},
+                                  view_valid ? &view : nullptr);
+  } else if (g_cs.hash == kSmaaCs) {
+    g_current.smaa = true;
+    if (smaa_insertion_armed()) return replace_smaa(cmd, dev);
   } else if (g_cs.hash == kVelocityCs) {
     g_current.velocity = true;
     note_view_cb(dev);
@@ -226,12 +322,18 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
     std::lock_guard lock(g_report_mutex);
     ++g_report.frames;
     update_status(g_report.insertion, g_current.insertion, "insertion (0xB2A276FD)");
-    update_status(g_report.fog, g_current.fog, "brouillard (0x42C0137E, optionnelle)");
+    update_status(g_report.smaa, g_current.smaa, "SMAA du jeu (0x42C0137E, optionnelle)");
+    using st = frame_report::smaa_state;
+    if (g_current.fsr_done) ++g_report.smaa_fsr_frames;
+    g_report.smaa_insertion = g_smaa_disarmed.load()                        ? st::disarmed
+                              : !insertion::get_fsr_settings().smaa_insertion ? st::off
+                              : g_current.fsr_done                            ? st::active
+                                                                              : st::fallback;
     update_status(g_report.velocity, g_current.velocity, "vélocité (0xF98BC308)");
     update_status(g_report.view_cb, g_current.view_cb, "CB View (608 B)");
     update_status(g_report.tonemap, g_current.tonemap, "tonemap");
     g_report.insertion.hash = kInsertionCs;
-    g_report.fog.hash = kFogCs;
+    g_report.smaa.hash = kSmaaCs;
     g_report.velocity.hash = kVelocityCs;
     if (g_current.tonemap) g_report.tonemap.hash = g_current.tonemap_hash;
     std::lock_guard view_lock(g_view_mutex);
@@ -244,6 +346,7 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
 }  // namespace
 
 void set_shader_patches_enabled(bool enabled) { g_patches_enabled = enabled; }
+void rearm_smaa_insertion() { g_smaa_disarmed = false; }
 bool shader_patches_enabled() { return g_patches_enabled.load(); }
 
 frame_report get_report() {
@@ -255,6 +358,8 @@ void register_events() {
   reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
   reshade::register_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
   reshade::register_event<reshade::addon_event::dispatch>(on_dispatch);
+  reshade::register_event<reshade::addon_event::draw>(on_draw);
+  reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
   reshade::register_event<reshade::addon_event::map_buffer_region>(on_map_buffer);
   reshade::register_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer);
   reshade::register_event<reshade::addon_event::update_buffer_region>(on_update_buffer);
@@ -270,6 +375,8 @@ void unregister_events() {
   reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
   reshade::unregister_event<reshade::addon_event::push_descriptors>(on_push_descriptors);
   reshade::unregister_event<reshade::addon_event::dispatch>(on_dispatch);
+  reshade::unregister_event<reshade::addon_event::draw>(on_draw);
+  reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
   reshade::unregister_event<reshade::addon_event::map_buffer_region>(on_map_buffer);
   reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer);
   reshade::unregister_event<reshade::addon_event::update_buffer_region>(on_update_buffer);

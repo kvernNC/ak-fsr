@@ -41,6 +41,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::set_config_value(nullptr, kSection, "ToggleKey", g_toggle_key.load());
   reshade::set_config_value(nullptr, kSection, "Highlights", s.highlights);
+  reshade::set_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
@@ -58,6 +59,7 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::get_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
   reshade::get_config_value(nullptr, kSection, "Highlights", s.highlights);
+  reshade::get_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
     std::lock_guard lock(g_settings_mutex);
@@ -73,12 +75,12 @@ void load_settings() {
 
 }  // namespace
 
-void before_post_pass(command_list *cmd, resource scene_color, resource depth, resource velocity,
-                      const fsr::view_data *view_cb) {
+bool before_post_pass(command_list *cmd, resource scene_color, resource depth, resource velocity,
+                      const fsr::view_data *view_cb, resource output) {
   const mode m = g_bypass.load(std::memory_order_relaxed) ? mode::off : g_mode.load(std::memory_order_relaxed);
   if (m == mode::off || scene_color.handle == 0) {
     jitter::set_enabled(false);
-    return;
+    return false;
   }
 
   device *dev = cmd->get_device();
@@ -86,7 +88,7 @@ void before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     if (!g_logged_failure.exchange(true)) {
       reshade::log::message(reshade::log::level::error, ("AK-FSR: interop Vulkan indisponible : " + vk::status()).c_str());
     }
-    return;
+    return false;
   }
   static bool logged_ready = false;
   if (!logged_ready) {
@@ -97,26 +99,31 @@ void before_post_pass(command_list *cmd, resource scene_color, resource depth, r
   auto *color = reinterpret_cast<ID3D11Resource *>(scene_color.handle);
   jitter::set_enabled(m == mode::fsr && get_fsr_settings().jitter);
   if (m == mode::fsr) {
-    if (depth.handle == 0 || view_cb == nullptr) return;
+    if (depth.handle == 0 || view_cb == nullptr) return false;
     fsr::frame_inputs in;
     in.color = color;
     in.depth = reinterpret_cast<ID3D11Resource *>(depth.handle);
     in.velocity = reinterpret_cast<ID3D11Resource *>(velocity.handle);
     in.view = *view_cb;
+    in.output = output.handle != 0 ? reinterpret_cast<ID3D11Resource *>(output.handle) : nullptr;
     const fsr::settings s = get_fsr_settings();
     auto *native = reinterpret_cast<ID3D11Device *>(dev->get_native());
     auto *imm = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
     const bool split = s.highlights && highlights::extract(native, imm, color, s.highlight_threshold);
-    fsr::run(in, s);  // les échecs sont journalisés par fsr
-    if (split) highlights::reinject(native, imm, color);  // aussi après un échec : couleur d'origine rétablie
-    return;
+    const bool ok = fsr::run(in, s);  // les échecs sont journalisés par fsr
+    // Aussi après un échec : la couleur d'entrée retrouve ses hautes lumières.
+    if (split) highlights::reinject(native, imm, ok && in.output != nullptr ? in.output : color);
+    return ok;
   }
 
   const auto test = m == mode::mirror_half ? vk::test_mode::mirror_half : vk::test_mode::roundtrip;
   if (!vk::run_test(color, test) && !g_logged_failure.exchange(true)) {
     reshade::log::message(reshade::log::level::error, ("AK-FSR: test interop en échec : " + vk::status()).c_str());
   }
+  return false;
 }
+
+bool fsr_active() { return !g_bypass.load(std::memory_order_relaxed) && g_mode.load(std::memory_order_relaxed) == mode::fsr; }
 
 mode get_mode() { return g_mode.load(); }
 void set_mode(mode m) {
