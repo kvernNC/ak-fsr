@@ -101,3 +101,14 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   leur vélocité). Si c'est le cas, l'image traîne dès que la caméra tourne : le critère du plan n'est pas
   rempli et on garde la reprojection (option coupée). Le noter dans le retour.
 - Log : aucune ligne propre ; `contexte FSR créé …` réapparaît quand on coche/décoche (contexte recréé).
+
+## 7. M8.4 — Biais de LOD des textures
+
+- Option : curseur **« Biais de LOD (M8.4, au prochain lancement) »** ; `ReShade.ini` : `LodBias=-0.500000`
+  (0 = désactivé). **Redémarrer le jeu** après changement (les samplers sont créés au chargement) ; le biais
+  n'est appliqué que si le mode sauvegardé est FSR.
+- Valeurs à essayer : `-0.5`, puis `-1.0` (valeur d'AMD pour l'AA natif : log2(1) − 1).
+- Observer : textures au sol et façades lointaines plus nettes, sans grésillement supplémentaire en mouvement
+  (comparer avec `LodBias=0` au même endroit, mêmes réglages). Trop négatif → moiré qui scintille.
+- Onglet : « en vigueur : -0.50, N samplers modifiés, M laissés » (N > 0 attendu en jeu).
+- Log : `AK-FSR: biais de LOD des textures : -0.50 (samplers créés à partir de maintenant)` au chargement.

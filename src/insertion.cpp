@@ -7,6 +7,7 @@
 #include "fsr_dx11.hpp"
 #include "highlights.hpp"
 #include "jitter.hpp"
+#include "lod_bias.hpp"
 #include "passes.hpp"
 #include "vk_bridge.hpp"
 
@@ -48,6 +49,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
   reshade::set_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
   reshade::set_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
+  reshade::set_config_value(nullptr, kSection, "LodBias", s.lod_bias);
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
@@ -72,6 +74,8 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
   reshade::get_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
   reshade::get_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
+  reshade::get_config_value(nullptr, kSection, "LodBias", s.lod_bias);
+  lod_bias::configure(s.lod_bias, g_mode.load() == mode::fsr);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
     std::lock_guard lock(g_settings_mutex);
@@ -180,8 +184,12 @@ bool bypassed() { return g_bypass.load(); }
 
 void register_events() {
   load_settings();
+  lod_bias::register_events();
   reshade::register_event<reshade::addon_event::destroy_device>(on_destroy_device);
 }
-void unregister_events() { reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device); }
+void unregister_events() {
+  lod_bias::unregister_events();
+  reshade::unregister_event<reshade::addon_event::destroy_device>(on_destroy_device);
+}
 
 }  // namespace akfsr::insertion

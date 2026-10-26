@@ -11,6 +11,7 @@ Branche de travail autonome (pas de push). Un commit par sous-étape ; procédur
 | M8.1 insertion au SMAA du jeu | codé, à tester | `SmaaInsertion` |
 | M8.2 backend FSR 3 DX11 natif | codé, à tester (DLL séparée) | `Backend=1` |
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
+| M8.4 biais de LOD des textures | codé, à tester | `LodBias` |
 
 ## Blocages
 

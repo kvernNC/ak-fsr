@@ -39,6 +39,7 @@ struct settings {
   bool game_mv = false;
   int game_mv_scale = 0;     // 0 : UV (× taille, lecture de M5) ; 1 : [-1, 1] (× taille / 2, lecture de Luma)
   bool game_mv_flip_y = false;
+  float lod_bias = 0.0f;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
 };
 
 struct frame_inputs {

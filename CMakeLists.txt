@@ -18,6 +18,7 @@ add_library(ak-fsr SHARED
   src/d3d_compute.cpp
   src/highlights.cpp
   src/fsr_dx11.cpp
+  src/lod_bias.cpp
   src/ak-fsr.rc)
 target_include_directories(ak-fsr PRIVATE
   third_party/reshade/include

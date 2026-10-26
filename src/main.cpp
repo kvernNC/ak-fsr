@@ -13,6 +13,7 @@
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
+#include "lod_bias.hpp"
 #include "passes.hpp"
 #include "vk_bridge.hpp"
 #include "version.h"
@@ -227,6 +228,13 @@ void on_overlay(reshade::api::effect_runtime *) {
     fsr_changed |= ImGui::RadioButton("[-1,1]", &fsr_settings.game_mv_scale, 1);
     ImGui::SameLine();
     fsr_changed |= ImGui::Checkbox("Y inversé", &fsr_settings.game_mv_flip_y);
+  }
+  {
+    ImGui::SetNextItemWidth(160);
+    fsr_changed |= ImGui::SliderFloat("Biais de LOD (M8.4, au prochain lancement)", &fsr_settings.lod_bias, -2.0f, 0.0f,
+                                      "%.2f");
+    const auto lb = akfsr::lod_bias::get_stats();
+    ImGui::Text("    en vigueur : %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified, lb.skipped);
   }
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR (M7)", &fsr_settings.highlights);
   if (fsr_settings.highlights) {
