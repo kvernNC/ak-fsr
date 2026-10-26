@@ -169,3 +169,13 @@ En bas de l'onglet, **« Rapport de test (fichier + presse-papiers) »** : copie
 `Binaries/Win64/ak-fsr-report.txt` (et au log) tous les réglages, passes, ressources, états des options et
 mesures (CPU/GPU des deux backends). Le faire **après chaque test**, au même endroit du jeu, et me coller le
 fichier avec `ReShade.log`.
+
+## Outil : explorateur de pixel shaders (pour débloquer M7.3, pluie)
+
+- Onglet → nœud **« Explorateur de pixel shaders (M7.3, pluie) »** (actif seulement nœud ouvert).
+- Sous la pluie, en ville : la table liste les PS de la frame (ordre, « avant » / « après insertion »,
+  nombre de draws et de sommets). Cocher « masquer » sur les PS candidats (souvent beaucoup de sommets,
+  ou des draws « après insertion ») jusqu'à faire disparaître la pluie ; on peut fermer l'overlay pour mieux
+  voir, le masquage reste actif tant que le nœud est ouvert.
+- Me noter le ou les hash qui font disparaître la pluie, et s'ils sont « avant » ou « après insertion ».
+  Faire aussi un rapport de test et une capture F10 au même moment.

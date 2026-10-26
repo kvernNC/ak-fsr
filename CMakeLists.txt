@@ -17,6 +17,7 @@ add_library(ak-fsr SHARED
   src/shader_patch.cpp
   src/d3d_compute.cpp
   src/gpu_timer.cpp
+  src/shader_explorer.cpp
   src/highlights.cpp
   src/fsr_dx11.cpp
   src/lod_bias.cpp

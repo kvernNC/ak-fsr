@@ -9,6 +9,7 @@
 #include "frame_dump.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
+#include "shader_explorer.hpp"
 #include "shader_patch.hpp"
 
 using namespace reshade::api;
@@ -89,7 +90,8 @@ void update_status(pass_status &s, bool found_now, const char *name) {
 void on_bind_pipeline(command_list *cmd, pipeline_stage stages, pipeline p) {
   if (!is_immediate(cmd)) return;
   if ((stages & pipeline_stage::compute_shader) != 0) g_cs.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
-  if ((stages & pipeline_stage::pixel_shader) != 0 && g_smaa_option.load(std::memory_order_relaxed))
+  if ((stages & pipeline_stage::pixel_shader) != 0 &&
+      (g_smaa_option.load(std::memory_order_relaxed) || explorer::enabled()))
     g_ps.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
 }
 
@@ -103,9 +105,15 @@ bool skip_smaa_draw() {
   return true;
 }
 
-bool on_draw(command_list *cmd, uint32_t, uint32_t, uint32_t, uint32_t) { return is_immediate(cmd) && skip_smaa_draw(); }
-bool on_draw_indexed(command_list *cmd, uint32_t, uint32_t, uint32_t, int32_t, uint32_t) {
-  return is_immediate(cmd) && skip_smaa_draw();
+bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t, uint32_t) {
+  if (!is_immediate(cmd)) return false;
+  const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
+  return skip_smaa_draw() || hidden;
+}
+bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, uint32_t, int32_t, uint32_t) {
+  if (!is_immediate(cmd)) return false;
+  const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
+  return skip_smaa_draw() || hidden;
 }
 
 void on_push_descriptors(command_list *cmd, shader_stage stages, pipeline_layout, uint32_t,
@@ -249,6 +257,7 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   if (shader_patch::needs_jitter_cb(g_cs.hash)) bind_jitter_cb(dev, cmd);
   if (g_cs.hash == kInsertionCs) {
     g_current.insertion = true;
+    explorer::on_insertion();
     note_view_cb(dev);
     const auto depth = resolve_view(dev, g_cs.srv[0]);
     const auto color = resolve_view(dev, g_cs.srv[1]);
@@ -344,6 +353,7 @@ void on_destroy_resource(device *, resource res) {
 
 void on_present(command_queue *queue, swapchain *, const rect *, const rect *, uint32_t, const rect *) {
   g_immediate = queue->get_immediate_command_list();
+  explorer::on_present();
   {
     std::lock_guard lock(g_report_mutex);
     ++g_report.frames;

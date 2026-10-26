@@ -17,6 +17,7 @@
 #include "jitter.hpp"
 #include "lod_bias.hpp"
 #include "passes.hpp"
+#include "shader_explorer.hpp"
 #include "vk_bridge.hpp"
 #include "vk_device_hook.hpp"
 #include "version.h"
@@ -396,6 +397,42 @@ void on_overlay(reshade::api::effect_runtime *) {
   ImGui::Text("Map de buffers : %u%s", s.buffer_maps, s.buffer_maps == 0 ? " (aucun : CB non capturés)" : "");
 
   ImGui::Separator();
+  if (ImGui::TreeNode("Explorateur de pixel shaders (M7.3, pluie)")) {
+    akfsr::explorer::set_enabled(true);
+    ImGui::TextWrapped("PS des draws de la dernière frame, dans l'ordre. Cocher « masquer » pour sauter leurs draws "
+                       "et les reconnaître à l'écran (rien n'est sauvegardé ; fermer ce nœud démasque tout).");
+    if (ImGui::Button("Tout démasquer")) akfsr::explorer::clear_hidden();
+    const auto entries = akfsr::explorer::get_entries();
+    if (ImGui::BeginTable("ps", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg,
+                          ImVec2(0, 300))) {
+      ImGui::TableSetupColumn("masquer");
+      ImGui::TableSetupColumn("PS");
+      ImGui::TableSetupColumn("position");
+      ImGui::TableSetupColumn("draws");
+      ImGui::TableSetupColumn("sommets");
+      ImGui::TableHeadersRow();
+      for (const auto &e : entries) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::PushID(static_cast<int>(e.hash));
+        bool hidden = e.hidden;
+        if (ImGui::Checkbox("##h", &hidden)) akfsr::explorer::set_hidden(e.hash, hidden);
+        ImGui::PopID();
+        ImGui::TableNextColumn();
+        ImGui::Text("0x%08X", e.hash);
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(e.after_insertion ? "après insertion" : "avant");
+        ImGui::TableNextColumn();
+        ImGui::Text("%u", e.draws);
+        ImGui::TableNextColumn();
+        ImGui::Text("%u", e.vertices);
+      }
+      ImGui::EndTable();
+    }
+    ImGui::TreePop();
+  } else {
+    akfsr::explorer::set_enabled(false);
+  }
   ImGui::BeginDisabled(s.capture_busy);
   if (ImGui::Button(s.capture_busy ? "Capture en cours..." : "Capturer une frame (F10)")) akfsr::dump::request_capture();
   ImGui::EndDisabled();

@@ -58,7 +58,8 @@ Exclus comme demandé : M6, M9. Non demandé : M8.5 (exposition du jeu).
   après le tonemap (variante sans grain du mod DLAA) demande d'agir *après* le dispatch du tonemapper ;
   ReShade n'a pas d'événement « après dispatch », il faudrait remplacer le tonemapper ou s'accrocher à la
   passe suivante. Non fait ; le gain par rapport au RCAS intégré est faible.
-- **M7.3 — Pluie après l'AA** : les draws de pluie ne sont pas identifiés (aucune capture sous la pluie).
+- **M7.3 — Pluie après l'AA** : les draws de pluie ne sont pas identifiés (aucune capture sous la pluie) ;
+  l'explorateur de pixel shaders de l'onglet sert à les trouver en jeu (voir TESTING.md).
   Il faut une capture F10 sous la pluie, mode Off, pour trouver leurs PS/VS et savoir s'ils sont dessinés
   avant `0xB2A276FD` (il faudrait alors les sauter puis les rejouer après FSR) ou après (rien à faire).
 - **glslang indisponible** : nouvelles passes en HLSL compilé à l'exécution ; `shaders/fsr_prepare.comp`
