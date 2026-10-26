@@ -13,6 +13,7 @@
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
+#include "vk_device_hook.hpp"
 #include "lod_bias.hpp"
 #include "passes.hpp"
 #include "vk_bridge.hpp"
@@ -245,8 +246,17 @@ void on_overlay(reshade::api::effect_runtime *) {
     ImGui::SameLine();
     ImGui::TextDisabled("(%s)", akfsr::highlights::status().c_str());
   }
+  fsr_changed |= ImGui::Checkbox("FSR 4 pilote (M10.2, au prochain lancement)", &fsr_settings.fsr4_driver);
+  if (fsr_settings.fsr4_driver) {
+    const auto hook = akfsr::vk_device_hook::get_status();
+    ImGui::TextWrapped("    device Vulkan : %s", hook.message.empty() ? "détour non installé (relancer le jeu)"
+                                                                       : hook.message.c_str());
+  }
   if (fsr_changed) akfsr::insertion::set_fsr_settings(fsr_settings);
   if (!fsr_info.provider.empty()) ImGui::Text("Version utilisée : %s", fsr_info.provider.c_str());
+  if (!fsr_info.fsr4_status.empty())
+    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 pilote indisponible, repli sur FSR 3.1 : %s",
+                       fsr_info.fsr4_status.c_str());
   if (fsr_settings.fsr_backend == akfsr::fsr::backend::dx11)
     ImGui::Text("Backend DX11 : %s | CPU %.3f ms", fsr_info.dx11_status.empty() ? "pas encore lancé" :
                 fsr_info.dx11_status.c_str(), fsr_info.dx11_cpu_ms);
@@ -302,6 +312,8 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       akfsr::passes::register_events();
       akfsr::insertion::register_events();
       akfsr::jitter::install();
+      // M10.2 : avant la création du device de DXVK (ReShade charge les addons dans D3D11CreateDevice).
+      if (akfsr::insertion::get_fsr_settings().fsr4_driver) akfsr::vk_device_hook::install();
       reshade::register_overlay("AK-FSR", on_overlay);
       reshade::log::message(reshade::log::level::info,
                             "AK-FSR: addon loaded (v" AKFSR_VERSION ", " AKFSR_MILESTONE ")");

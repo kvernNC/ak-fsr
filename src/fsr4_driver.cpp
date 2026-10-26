@@ -1,0 +1,279 @@
+#include "fsr4_driver.hpp"
+
+#include <windows.h>
+
+#include <ffx_api/ffx_upscale.h>
+#include <ffx_api/vk/ffx_api_vk.h>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <vector>
+
+#include <reshade.hpp>
+
+#include "spirv_half_image.hpp"
+
+namespace akfsr::fsr4 {
+namespace {
+
+// --- Interface du pilote (§8.1) ---------------------------------------------------------------------------
+using can_provide_fn = bool (*)(uint64_t desc_type);
+struct provider_data {        // version 2 de la structure, 0x50 octets
+  uint32_t struct_version;    // 2
+  uint64_t desc_type;         // 0x10000 : création d'upscaler
+  uint64_t version_id;        // rempli par le pilote
+  const char *version_name;   // idem
+  can_provide_fn can_provide;
+  PfnFfxCreateContext create_context;
+  PfnFfxDestroyContext destroy_context;
+  PfnFfxConfigure configure;
+  PfnFfxQuery query;
+  PfnFfxDispatch dispatch;
+};
+static_assert(sizeof(provider_data) == 0x50);
+
+struct provider_option {  // nœud de la chaîne d'options de UpdateFfxApiProviderEx
+  uint32_t value_type;    // 0 : booléen
+  uint32_t id;            // 0 : activer l'upscaler
+  uint8_t value;
+  provider_option *next;
+};
+static_assert(sizeof(provider_option) == 0x18);
+
+using update_provider_ex_fn = HRESULT(WINAPI *)(void *data, uint32_t size, provider_option *options);
+
+constexpr uint64_t kBackendVkDescSdk2 = 0x01000003ull;  // ffxCreateBackendVKDesc, numérotation du SDK 2.x
+constexpr uint64_t kUpscaleVersionDesc = 0x1000Bull;
+constexpr uint32_t make_version(uint32_t major, uint32_t minor, uint32_t patch) {
+  return (major << 22) | (minor << 12) | patch;
+}
+struct upscale_version_desc {
+  ffxApiHeader header;
+  uint32_t version;
+};
+
+// --- État -------------------------------------------------------------------------------------------------
+std::mutex g_mutex;
+info g_info;
+provider_data g_provider{};
+PFN_vkGetDeviceProcAddr g_base_gdpa = nullptr;
+PFN_vkCreateShaderModule g_create_shader_module = nullptr;
+PFN_vkCreateComputePipelines g_create_compute_pipelines = nullptr;
+
+void log(reshade::log::level level, const std::string &msg) {
+  reshade::log::message(level, ("AK-FSR: FSR 4 pilote : " + msg).c_str());
+}
+
+void *alloc(void *, uint64_t size) { return std::malloc(static_cast<size_t>(size)); }
+void dealloc(void *, void *p) { std::free(p); }
+const ffxAllocationCallbacks kAllocator{nullptr, alloc, dealloc};
+
+std::wstring addon_dir() {
+  HMODULE self = nullptr;
+  GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                     reinterpret_cast<LPCWSTR>(&addon_dir), &self);
+  wchar_t path[MAX_PATH] = {};
+  GetModuleFileNameW(self, path, MAX_PATH);
+  if (wchar_t *slash = wcsrchr(path, L'\\')) *(slash + 1) = 0;
+  return path;
+}
+
+// Nom de modèle dans les chaînes du SPIR-V (points d'entrée, OpString, OpName) : « fsr4_model… ».
+void note_model(const uint32_t *code, size_t words) {
+  for (size_t i = 5; i < words;) {
+    const uint32_t count = code[i] >> 16, opcode = code[i] & 0xFFFF;
+    if (count == 0 || i + count > words) return;
+    size_t first = opcode == 15 ? 3 : (opcode == 7 || opcode == 5) ? 2 : 0;  // EntryPoint, String, Name
+    if (first != 0 && count > first) {
+      const char *s = reinterpret_cast<const char *>(code + i + first);
+      const std::string name(s, strnlen(s, (count - first) * 4));
+      if (name.find("fsr4_model") != std::string::npos) {
+        std::lock_guard lock(g_mutex);
+        if (g_info.model_seen.empty()) {
+          g_info.model_seen = name;
+          log(reshade::log::level::info, "modèle relevé dans les shaders : " + name);
+        }
+        return;
+      }
+    }
+    i += count;
+  }
+}
+
+// Module réécrit (images float16 -> float32) ; `storage` garde les mots en vie pendant l'appel.
+const VkShaderModuleCreateInfo *patch_module(const VkShaderModuleCreateInfo *info, VkShaderModuleCreateInfo &copy,
+                                             std::vector<uint32_t> &storage) {
+  const size_t words = info->codeSize / 4;
+  note_model(info->pCode, words);
+  std::string error;
+  const auto r = spirv::promote_half_images(info->pCode, words, storage, error);
+  std::lock_guard lock(g_mutex);
+  ++g_info.shaders;
+  if (r == spirv::result::failed) {
+    if (++g_info.shader_failures <= 4) log(reshade::log::level::warning, "réécriture SPIR-V impossible : " + error);
+    return info;
+  }
+  if (r == spirv::result::unchanged) return info;
+  ++g_info.shaders_rewritten;
+  copy = *info;
+  copy.codeSize = storage.size() * 4;
+  copy.pCode = storage.data();
+  return &copy;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL hooked_create_shader_module(VkDevice device, const VkShaderModuleCreateInfo *info,
+                                                           const VkAllocationCallbacks *allocator,
+                                                           VkShaderModule *module) {
+  VkShaderModuleCreateInfo copy;
+  std::vector<uint32_t> storage;
+  return g_create_shader_module(device, patch_module(info, copy, storage), allocator, module);
+}
+
+// Modules passés directement dans la chaîne d'un étage de pipeline (VK_KHR_maintenance5).
+VKAPI_ATTR VkResult VKAPI_CALL hooked_create_compute_pipelines(VkDevice device, VkPipelineCache cache, uint32_t count,
+                                                               const VkComputePipelineCreateInfo *infos,
+                                                               const VkAllocationCallbacks *allocator,
+                                                               VkPipeline *pipelines) {
+  std::vector<VkComputePipelineCreateInfo> local(infos, infos + count);
+  std::vector<VkShaderModuleCreateInfo> copies(count);
+  std::vector<std::vector<uint32_t>> storage(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    auto *chained = static_cast<const VkShaderModuleCreateInfo *>(local[i].stage.pNext);
+    if (local[i].stage.module == VK_NULL_HANDLE && chained != nullptr &&
+        chained->sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
+      local[i].stage.pNext = patch_module(chained, copies[i], storage[i]);
+  }
+  return g_create_compute_pipelines(device, cache, count, local.data(), allocator, pipelines);
+}
+
+PFN_vkVoidFunction VKAPI_CALL driver_get_device_proc_addr(VkDevice device, const char *name) {
+  PFN_vkVoidFunction f = g_base_gdpa(device, name);
+  if (f == nullptr || name == nullptr) return f;
+  if (std::strcmp(name, "vkCreateShaderModule") == 0) {
+    g_create_shader_module = reinterpret_cast<PFN_vkCreateShaderModule>(f);
+    return reinterpret_cast<PFN_vkVoidFunction>(&hooked_create_shader_module);
+  }
+  if (std::strcmp(name, "vkCreateComputePipelines") == 0) {
+    g_create_compute_pipelines = reinterpret_cast<PFN_vkCreateComputePipelines>(f);
+    return reinterpret_cast<PFN_vkVoidFunction>(&hooked_create_compute_pipelines);
+  }
+  return f;
+}
+
+bool fail(const std::string &why) {
+  std::lock_guard lock(g_mutex);
+  g_info.ok = false;
+  g_info.status = why;
+  log(reshade::log::level::error, why);
+  return false;
+}
+
+}  // namespace
+
+bool load() {
+  {
+    std::lock_guard lock(g_mutex);
+    if (g_info.tried) return g_info.ok;
+    g_info.tried = true;
+  }
+  const std::wstring dir = addon_dir() + L"ak-fsr\\";
+  // Le pilote ne donne ses providers qu'en présence de DLL du SDK signées par AMD (§8.1).
+  int signed_loaded = 0;
+  for (const wchar_t *name : {L"amd_fidelityfx_loader_vk.dll", L"amd_fidelityfx_upscaler_vk.dll"}) {
+    if (LoadLibraryW((dir + name).c_str()) != nullptr) {
+      ++signed_loaded;
+    } else {
+      char buf[160];
+      std::snprintf(buf, sizeof(buf), "%ls introuvable dans ak-fsr\\ (erreur %lu)", name, GetLastError());
+      log(reshade::log::level::warning, buf);
+    }
+  }
+  HMODULE driver = LoadLibraryW((dir + L"amdvkffx64.dll").c_str());
+  if (driver == nullptr) driver = GetModuleHandleW(L"amdvkffx64.dll");
+  if (driver == nullptr)
+    return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr\\ (erreur " + std::to_string(GetLastError()) +
+                ")");
+  auto update = reinterpret_cast<update_provider_ex_fn>(GetProcAddress(driver, "UpdateFfxApiProviderEx"));
+  if (update == nullptr) return fail("export UpdateFfxApiProviderEx absent de amdvkffx64.dll");
+
+  provider_data data{};
+  data.struct_version = 2;
+  data.desc_type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
+  provider_option enable_upscaler{0, 0, 1, nullptr};
+  const HRESULT hr = update(&data, sizeof(data), &enable_upscaler);
+  char buf[200];
+  std::snprintf(buf, sizeof(buf), "UpdateFfxApiProviderEx : hr 0x%08lx, id 0x%016llx, nom « %s », %d DLL signée(s)",
+                static_cast<unsigned long>(hr), static_cast<unsigned long long>(data.version_id),
+                data.version_name != nullptr ? data.version_name : "-", signed_loaded);
+  log(reshade::log::level::info, buf);
+  if (FAILED(hr) || data.create_context == nullptr || data.dispatch == nullptr || data.destroy_context == nullptr)
+    return fail(signed_loaded < 2 ? "le pilote n'a pas donné de provider (DLL signées du SDK manquantes ?)"
+                                  : "le pilote n'a pas donné de provider");
+  if (data.version_id != kDriverVersionId) {
+    std::snprintf(buf, sizeof(buf), "identifiant inattendu 0x%016llx (attendu 0x%016llx) : version du pilote non prise "
+                  "en charge", static_cast<unsigned long long>(data.version_id),
+                  static_cast<unsigned long long>(kDriverVersionId));
+    return fail(buf);
+  }
+  std::lock_guard lock(g_mutex);
+  g_provider = data;
+  g_info.ok = true;
+  g_info.provider_id = data.version_id;
+  g_info.provider_name = data.version_name != nullptr ? data.version_name : "";
+  g_info.status = "provider prêt";
+  return true;
+}
+
+ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *upscale, VkDevice device,
+                               VkPhysicalDevice physical, PFN_vkGetDeviceProcAddr get_device_proc_addr) {
+  if (!load()) return FFX_API_RETURN_NO_PROVIDER;
+  g_base_gdpa = get_device_proc_addr;
+  ffxCreateBackendVKDesc backend{};
+  backend.header.type = kBackendVkDescSdk2;
+  backend.vkDevice = device;
+  backend.vkPhysicalDevice = physical;
+  backend.vkDeviceProcAddr = driver_get_device_proc_addr;
+  upscale_version_desc version{};
+  version.header.type = kUpscaleVersionDesc;
+  version.version = make_version(4, 1, 2);
+  backend.header.pNext = &version.header;
+  upscale->pNext = &backend.header;
+  const ffxReturnCode_t rc = g_provider.create_context(context, upscale, &kAllocator);
+  upscale->pNext = nullptr;
+  std::lock_guard lock(g_mutex);
+  g_info.status = rc == FFX_API_RETURN_OK ? "contexte créé" : "création du contexte : code " + std::to_string(rc);
+  return rc;
+}
+
+ffxReturnCode_t destroy_context(ffxContext *context) {
+  return g_provider.destroy_context != nullptr ? g_provider.destroy_context(context, &kAllocator)
+                                               : FFX_API_RETURN_NO_PROVIDER;
+}
+
+ffxReturnCode_t dispatch(ffxContext *context, const ffxDispatchDescHeader *desc) {
+  return g_provider.dispatch != nullptr ? g_provider.dispatch(context, desc) : FFX_API_RETURN_NO_PROVIDER;
+}
+
+ffxReturnCode_t query(ffxContext *context, ffxQueryDescHeader *desc) {
+  return g_provider.query != nullptr ? g_provider.query(context, desc) : FFX_API_RETURN_NO_PROVIDER;
+}
+
+std::string expected_model(const char *device_name) {
+  const std::string n = device_name != nullptr ? device_name : "";
+  auto has = [&](const char *s) { return n.find(s) != std::string::npos; };
+  if (has("GFX12")) return "FP8 (RDNA 4)";
+  if (has("VANGOGH") || has("GFX1033")) return "INT8 Lite (Van Gogh, Steam Deck)";
+  if (has("GFX115") || has("STRIX")) return "INT8 Lite (Strix Point)";
+  if (has("GFX11")) return "INT8 (RDNA 3)";
+  if (has("GFX103")) return "INT8-2 (RDNA 2)";
+  return "inconnu";
+}
+
+info get_info() {
+  std::lock_guard lock(g_mutex);
+  return g_info;
+}
+
+}  // namespace akfsr::fsr4

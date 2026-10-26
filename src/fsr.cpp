@@ -11,6 +11,7 @@
 
 #include <reshade.hpp>
 
+#include "fsr4_driver.hpp"
 #include "fsr_dx11.hpp"
 #include "fsr_params.hpp"
 #include "jitter.hpp"
@@ -48,6 +49,7 @@ struct state {
   ffxContext context = nullptr;
   bool ctx_auto_exposure = false;
   bool ctx_game_mv = false;
+  bool ctx_driver = false;  // M10.2 : contexte du provider FSR 4 du pilote
   uint64_t ctx_version = 0;
   bool versions_queried = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
@@ -197,8 +199,14 @@ bool create_pipeline() {
 }
 
 void destroy_context() {
-  if (g.context != nullptr) ffx.destroy(&g.context, nullptr);
+  if (g.context != nullptr) {
+    if (g.ctx_driver)
+      fsr4::destroy_context(&g.context);
+    else
+      ffx.destroy(&g.context, nullptr);
+  }
   g.context = nullptr;
+  g.ctx_driver = false;
 }
 
 void destroy_frame_resources() {
@@ -226,6 +234,14 @@ void destroy_all() {
   g.tried_dll = tried;  // la DLL reste chargée
   g.dll_ok = dll_ok;
   g.versions_queried = queried;
+}
+
+// Nom du GPU vu par Vulkan (RADV : « … (RADV GFX1201) »).
+const char *device_name() {
+  static VkPhysicalDeviceProperties props{};
+  if (props.deviceName[0] == 0 && ctx().physical != VK_NULL_HANDLE)
+    fn.vkGetPhysicalDeviceProperties(ctx().physical, &props);
+  return props.deviceName;
 }
 
 // Versions de l'upscaler présentes dans la DLL (journalisées une fois, proposées dans l'overlay).
@@ -341,8 +357,35 @@ bool ensure_context(const settings &s) {
                   s.version_id != 0 ? std::to_string(s.version_id).c_str() : "défaut", s.auto_exposure ? "oui" : "non");
     reshade::log::message(reshade::log::level::info, msg);
   }
-  ffxReturnCode_t rc = ffx.create(&g.context, &desc.header, nullptr);
-  if (rc != FFX_API_RETURN_OK && s.version_id != 0) {
+  ffxReturnCode_t rc = FFX_API_RETURN_ERROR;
+  std::string driver_failure;
+  if (s.version_id == fsr4::kDriverVersionId) {
+    // M10.2 : provider FSR 4 du pilote, repli sur la version par défaut de amd_fidelityfx_vk.dll.
+    if (!s.fsr4_driver) {
+      driver_failure = "option « FSR 4 pilote » désactivée";
+    } else {
+      rc = fsr4::create_context(&g.context, &desc.header, ctx().device, ctx().physical, ffx_get_device_proc_addr);
+      if (rc == FFX_API_RETURN_OK)
+        g.ctx_driver = true;
+      else
+        driver_failure = fsr4::get_info().status;
+    }
+    if (!g.ctx_driver) {
+      g.context = nullptr;
+      reshade::log::message(reshade::log::level::warning,
+                            ("AK-FSR: FSR 4 pilote indisponible (" + driver_failure + "), repli sur FSR 3.1").c_str());
+      desc.header.pNext = &backend.header;  // create_context du pilote a remplacé la chaîne
+      backend.header.pNext = nullptr;
+      rc = ffx.create(&g.context, &desc.header, nullptr);
+    }
+  } else {
+    rc = ffx.create(&g.context, &desc.header, nullptr);
+  }
+  {
+    std::lock_guard lock(g_info_mutex);
+    g_info.fsr4_status = driver_failure;
+  }
+  if (rc != FFX_API_RETURN_OK && s.version_id != 0 && !g.ctx_driver && driver_failure.empty()) {
     // Version sauvegardée absente (ex. FSR 4 fourni par OptiScaler, lancé sans lui) : version par défaut.
     reshade::log::message(reshade::log::level::warning,
                           ("AK-FSR: version FSR demandée indisponible (code " + std::to_string(rc) +
@@ -364,9 +407,14 @@ bool ensure_context(const settings &s) {
 
   ffxQueryGetProviderVersion provider{};
   provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
-  const std::string name = ffx.query(&g.context, &provider.header) == FFX_API_RETURN_OK && provider.versionName
-                               ? provider.versionName
-                               : "?";
+  std::string name;
+  if (g.ctx_driver) {
+    name = std::string(fsr4::kDriverVersionName) + ", modèle attendu " + fsr4::expected_model(device_name());
+  } else {
+    name = ffx.query(&g.context, &provider.header) == FFX_API_RETURN_OK && provider.versionName
+               ? provider.versionName
+               : "?";
+  }
   {
     std::lock_guard lock(g_info_mutex);
     g_info.provider = name;
@@ -648,7 +696,7 @@ bool run(const frame_inputs &in, const settings &s) {
   d.cameraFovAngleVertical = p.fov;
   d.viewSpaceToMetersFactor = 0.01f;  // unités UE3 : centimètres
   d.flags = s.debug_view ? FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW : 0;
-  const ffxReturnCode_t rc = ffx.dispatch(&g.context, &d.header);
+  const ffxReturnCode_t rc = g.ctx_driver ? fsr4::dispatch(&g.context, &d.header) : ffx.dispatch(&g.context, &d.header);
   mark(cmd, 2);
 
   VkImageMemoryBarrier back = barrier(g.color_out, VK_IMAGE_LAYOUT_GENERAL, kSharedLayout, VK_ACCESS_SHADER_WRITE_BIT,

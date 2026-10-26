@@ -50,6 +50,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
   reshade::set_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::set_config_value(nullptr, kSection, "LodBias", s.lod_bias);
+  reshade::set_config_value(nullptr, kSection, "Fsr4Driver", s.fsr4_driver);
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
@@ -75,6 +76,7 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
   reshade::get_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::get_config_value(nullptr, kSection, "LodBias", s.lod_bias);
+  reshade::get_config_value(nullptr, kSection, "Fsr4Driver", s.fsr4_driver);
   lod_bias::configure(s.lod_bias, g_mode.load() == mode::fsr);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {

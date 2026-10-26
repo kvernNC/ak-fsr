@@ -112,3 +112,37 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   (comparer avec `LodBias=0` au même endroit, mêmes réglages). Trop négatif → moiré qui scintille.
 - Onglet : « en vigueur : -0.50, N samplers modifiés, M laissés » (N > 0 attendu en jeu).
 - Log : `AK-FSR: biais de LOD des textures : -0.50 (samplers créés à partir de maintenant)` au chargement.
+
+## 8. M10.2 — FSR 4 par le provider du pilote AMD
+
+- Fichiers (jamais dans le dépôt), dans **`Binaries/Win64/ak-fsr/`** :
+  - `amdvkffx64.dll` du pilote Adrenalin 26.10.1 (archive extraite avec 7-Zip, §8.1 de PLAN.md) ;
+  - `amd_fidelityfx_loader_dx12.dll` et `amd_fidelityfx_upscaler_dx12.dll` du FSR SDK 2.3
+    (`Kits/FidelityFX/signedbin/`), **renommées** `amd_fidelityfx_loader_vk.dll` et
+    `amd_fidelityfx_upscaler_vk.dll`.
+- PC (RDNA 4, modèle FP8) : ajouter `radv_cooperative_matrix2_nv=true` à la ligne de lancement Steam
+  (lu par RADV à l'initialisation, avant le chargement de l'addon).
+- Option : case **« FSR 4 pilote (M10.2, au prochain lancement) »** ; `ReShade.ini` : `Fsr4Driver=1`.
+  **Relancer le jeu** (le détour de `vkCreateDevice` s'installe au chargement de l'addon).
+  Puis choisir la version : menu « Version FSR » (voir M10.3) ou `Version=17700776142811697154`
+  (= `0xF5A5CA1E81001002`).
+- Logs attendus, dans l'ordre :
+  1. `FSR 4 pilote : détour de vkCreateDevice installé, en attente du device de DXVK`
+     (échec possible : `détour de vkCreateDevice refusé : prologue non reconnu à +N : XX XX …` → **me
+     transmettre la ligne** : il faut apprendre ce prologue au décodeur) ;
+  2. `FSR 4 pilote : device DXVK créé avec N extension(s) ajoutée(s) : VK_KHR_cooperative_matrix, … ;
+     absentes du GPU : …` (si `vkCreateDevice en échec avec les ajouts`, le jeu démarre quand même sans
+     elles) ;
+  3. `FSR 4 pilote : UpdateFfxApiProviderEx : hr 0x00000000, id 0xf5a5ca1e81001002, nom « … », 2 DLL signée(s)` ;
+  4. `contexte FSR créé : …, version 4.1.2 (provider pilote), modèle attendu FP8 (RDNA 4)` ;
+  5. éventuellement `FSR 4 pilote : modèle relevé dans les shaders : fsr4_model_…`.
+- Observer : image FSR 4 (plus stable que 3.1 sur les grilles et la pluie), pas de crash en sortie de vidéo.
+  Onglet « Version utilisée : 4.1.2 (provider pilote), modèle attendu … ».
+- Repli attendu en cas d'échec : `FSR 4 pilote indisponible (…), repli sur FSR 3.1` dans le log et en
+  orange dans l'onglet ; l'image reste celle de FSR 3.1. Raisons possibles : DLL introuvables, `le pilote n'a
+  pas donné de provider (DLL signées du SDK manquantes ?)`, `identifiant inattendu …` (autre version de
+  `amdvkffx64.dll`), `création du contexte : code N`.
+- Si le jeu plante au premier dispatch FSR 4 : relancer avec `Fsr4Driver=0`, me fournir `ReShade.log` et,
+  si possible, `PROTON_LOG=1`. Lignes utiles : `réécriture SPIR-V impossible : …`.
+- Deck (M10.1/M10.2) : même installation, sans `radv_cooperative_matrix2_nv`. Relever les extensions
+  « absentes du GPU », le nom de modèle relevé, et si le contexte se crée.

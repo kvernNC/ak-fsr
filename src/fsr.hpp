@@ -40,6 +40,8 @@ struct settings {
   int game_mv_scale = 0;     // 0 : UV (× taille, lecture de M5) ; 1 : [-1, 1] (× taille / 2, lecture de Luma)
   bool game_mv_flip_y = false;
   float lod_bias = 0.0f;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
+  // M10.2 : FSR 4 par le provider du pilote AMD (DLL dans ak-fsr/, détour de vkCreateDevice au lancement).
+  bool fsr4_driver = false;
 };
 
 struct frame_inputs {
@@ -61,6 +63,7 @@ struct info {
   float prev_mismatch = -1;                // écart max entre ViewProj précédente du CB et mémorisée (-1 : n/a)
   bool prev_from_memory = false;
   std::string dx11_status;  // M8.2 : état du backend DX11
+  std::string fsr4_status;  // M10.2 : FSR 4 pilote demandé mais indisponible (repli), vide sinon
   double dx11_cpu_ms = 0;
 };
 info get_info();

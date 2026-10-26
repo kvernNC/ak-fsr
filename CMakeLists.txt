@@ -19,6 +19,10 @@ add_library(ak-fsr SHARED
   src/highlights.cpp
   src/fsr_dx11.cpp
   src/lod_bias.cpp
+  src/detour.cpp
+  src/vk_device_hook.cpp
+  src/spirv_half_image.cpp
+  src/fsr4_driver.cpp
   src/ak-fsr.rc)
 target_include_directories(ak-fsr PRIVATE
   third_party/reshade/include
