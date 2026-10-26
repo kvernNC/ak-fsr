@@ -30,7 +30,7 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M7 : finitions | à faire | — |
 | M8 : optimisations Deck inspirées de Luma | à faire | à faire |
 | M9 : upscaling (rendu < natif) | exploratoire | — |
-| M10 : choix FSR 2 / 3 / 4 (fsr4-vk, sans OptiScaler) | à faire | à faire (coût à mesurer) |
+| M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | à faire (test M10.0) | à faire (test M10.1) |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
 budget visé de 2 ms. Détail du coût (préparation / FSR / copies / flush DXVK) : à relever sur Deck.
@@ -109,9 +109,11 @@ Licence MIT avec addendum : toute réutilisation de code doit citer les auteurs 
   - **Actuel — Vulkan via l'interop DXVK** : FSR 3.1 (FidelityFX SDK v1.1.4, `amd_fidelityfx_vk.dll`)
     sur des `VkImage` à nous, enveloppées en textures D3D11 (`CreateTexture2DFromVkImage`), avec copies
     D3D11, `FlushRenderingCommands` puis soumission sous `LockSubmissionQueue`. À conserver : c'est le
-    chemin par lequel FSR 4 apparaît avec OptiScaler (M10).
-  - **À ajouter — DX11 natif** (M8.2) : backend DX11 de FidelityFX, sélectionnable dans l'onglet.
-  - **À éviter** : pont DX11 → DX12 (instable sous Proton).
+    chemin de FSR 4 (provider du pilote AMD en Vulkan, M10).
+  - **À ajouter — provider FSR 4 du pilote AMD** (M10.2) : même chemin Vulkan, fonctions obtenues de
+    `amdvkffx64.dll` au lieu de `amd_fidelityfx_vk.dll`.
+  - **À ajouter — DX11 natif** (M8.2) : backend DX11 de FidelityFX pour FSR 3, sélectionnable dans l'onglet.
+  - **À éviter** : pont DX11 → DX12 (instable sous Proton), sauf en dernier repli pour FSR 4 (§8.2).
 - Point d'insertion :
   - **Actuel** : CS `0xB2A276FD` (préparation DoF/bloom ; t0 profondeur, t1 couleur HDR), présent
     quels que soient les réglages.
@@ -162,40 +164,83 @@ Ne pas passer au suivant sans validation.
   `ScreenPercentage=80` (et `UpscaleScreenPercentage=True`) dans `BmSystemSettings.ini` : 3D plus douce,
   UI nette, fps en hausse. Si oui, faire rendre FSR de la résolution réduite vers la native à la place
   de l'agrandissement du moteur.
-- **M10 — Choix FSR 2 / FSR 3 / FSR 4 sans OptiScaler** (voir §8) :
-  1. Menu « Version FSR » : lister les versions de **tous** les fournisseurs chargés, avec la DLL
-     d'origine : `amd_fidelityfx_vk.dll` (FSR 2.3.3, FSR 3.1.4) et, si présente,
-     `amd_fidelityfx_upscaler_vk.dll` de fsr4-vk (« 4.1.1 Vulkan Auto / INT8 / FP8 »).
-     Même API FFX (`ffxCreateContext` / `ffxDispatch` / `ffxQuery`), version imposée via
-     `ffxOverrideVersion` à la création du contexte.
-  2. Libellés : « FSR 4 » = FP8 (RDNA 4 uniquement, PC) ; « FSR 4 Lite » = INT8 (RDNA 2/3/4, Deck).
-     Masquer FP8 si le GPU ne le gère pas ; « Auto » laisse fsr4-vk choisir.
-  3. Vérifier au chargement que le `VkDevice` de DXVK expose ce que fsr4-vk exige
-     (`VK_EXT_descriptor_buffer`, buffer device address, synchronization2) ; sinon griser FSR 4
-     et l'indiquer dans l'onglet.
-  4. Repli sur FSR 3.1 si la création du contexte FSR 4 échoue (déjà le cas pour une version absente).
-  Critère : bascule FSR 2 / 3 / 4 Lite / 4 en jeu sans crash ; coût mesuré pour chacune sur Deck et PC.
-  FSR 4 Lite sur Deck : à n'adopter que si le coût tient dans le budget du §6.
+- **M10 — FSR 4 sans OptiScaler, code MIT** (spécification en §8.1). Ordre :
+  1. **M10.0 — Test sans code (PC)** : FSR4-Vulkan-Bridge installé à la main en remplacement de
+     `amd_fidelityfx_vk.dll`, avec sa couche Linux en `LD_PRELOAD`. Critère : « 4.1.2 » listée dans
+     l'onglet, `native-fsr4-bridge.log` montre un dispatch à 0 et des pipelines `fsr4_model_…_fp8_…`,
+     image correcte avec nos entrées (couleur HDR, profondeur, vecteurs, jitter).
+  2. **M10.1 — Test sans code (Deck)** : même installation sans FP8. Relever si le provider du pilote
+     se crée et quel modèle il choisit (attendu par AMD pour Van Gogh : INT8 Lite).
+  3. **M10.2 — Module « provider pilote » dans AK-FSR**, écrit par nous à partir des seuls faits
+     d'interface du §8.1 (aucun code copié d'OptiScaler, GPL-3.0, ni de FSR4-Vulkan-Bridge, sans licence) :
+     - charger les DLL AMD fournies par l'utilisateur depuis `Binaries/Win64/ak-fsr/` ;
+     - obtenir le provider via `UpdateFfxApiProviderEx`, vérifier l'identifiant d'implémentation ;
+     - activer les fonctions Vulkan nécessaires sur le device de DXVK en interceptant `vkCreateDevice`
+       **avant** que DXVK crée son device (vérifier que l'addon est chargé assez tôt : ReShade charge les
+       addons au moment de `D3D11CreateDevice`, avant l'appel réel) → plus besoin de `LD_PRELOAD` ;
+     - fournir au provider un `vkGetDeviceProcAddr` enveloppé qui corrige les shaders du pilote pour RADV
+       (types d'image float 16 bits → 32 bits dans le SPIR-V) ;
+     - repli automatique sur FSR 3.1 en cas d'échec, message clair dans l'onglet.
+  4. **M10.3 — Menu « Version FSR »** : FSR 2.3.3 et 3.1.4 (`amd_fidelityfx_vk.dll`, SDK 1.1.4), FSR 4.1.2
+     (provider pilote) avec le modèle effectivement utilisé (FP8, INT8, INT8-2, Lite) quand il est connu.
+  Critère global : bascule FSR 2 / 3 / 4 en jeu sans crash ; coût mesuré sur PC et Deck ; FSR 4 adopté sur
+  le Deck seulement s'il tient dans le budget du §6.
+  Options de repli si le provider pilote ne marche pas sur le Deck : fsr4-vk (INT8 4.1.1, GPL, DLL séparée
+  installée par l'utilisateur) ou backend DX12 via vkd3d-proton avec `FSR4_UPGRADE=1` (Lite officiel,
+  pont DX11↔DX12 à écrire). Voir §8.2 et §8.3.
 
-## 8. FSR 4 et OptiScaler (notes)
+## 8. FSR 4 (notes)
 
-### 8.1 Voie retenue : fsr4-vk, sans OptiScaler
+### 8.1 Voie retenue : provider FSR 4 du pilote AMD, appelé directement (faits d'interface)
 
-- AMD ne fournit FSR 4 qu'en DX12 (`amd_fidelityfx_upscaler_dx12.dll`) ; le dépôt du SDK 2.3.0 indique
-  « Vulkan is currently not supported ». OptiScaler l'obtient en Vulkan via un pont vers DX12 (vkd3d).
-- [fsr4-vk](https://github.com/Astyyyyy/fsr4-vk) (Astyyyyy) : implémentation Vulkan indépendante de
-  FSR 4.1.1, **FP8 et INT8**, à partir des modèles et shaders extraits de la DLL DX12 officielle du
-  FidelityFX SDK 2.3.0 (version 4.1.1.2740, empreinte vérifiée par ses outils). Produit
-  `amd_fidelityfx_upscaler_vk.dll`, qui exporte l'**API FFX standard** et annonce les versions
-  « 4.1.1 Vulkan Auto », « 4.1.1 Vulkan INT8 », « 4.1.1 Vulkan FP8 ». Compilation croisée Windows depuis
-  Linux prévue (MinGW-w64 : ajouter `mingw-w64-gcc` à l'image si besoin).
-- Exige sur le device : `VK_EXT_descriptor_buffer` (`vkGetDescriptorEXT`, …), buffer device address,
-  synchronization2. À vérifier sur le device de DXVK (PC et Deck).
-- Projet très jeune (premiers commits fin octobre 2026), licence **GPL-3.0-only** : ne pas l'inclure dans
-  le dépôt ni dans les binaires d'AK-FSR ; chaque utilisateur le compile lui-même (il a besoin de la DLL
-  AMD de toute façon). AK-FSR se contente de le charger s'il est présent.
+Faits relevés dans OptiScaler (`OptiScaler/fsr4/FSR4DriverProvider*.h/.cpp`, GPL-3.0) et dans
+[FSR4-Vulkan-Bridge](https://github.com/SemiRealProductions/FSR4-Vulkan-Bridge) (aucune licence publiée).
+Ce sont des **faits d'interopérabilité** ; l'implémentation d'AK-FSR doit être écrite de zéro.
 
-### 8.2 Essais avec OptiScaler (historique)
+- **DLL du pilote** : `amdvkffx64.dll`, tirée du pilote Windows AMD Adrenalin 26.10.1
+  (dossier `Packages/Drivers/Display/WT6A_INF/…` de l'archive extraite avec 7-Zip, sans installer le pilote).
+  Propriétaire : **jamais dans le dépôt**, fournie par l'utilisateur.
+- **Condition du pilote** : il ne donne ses providers que si des DLL du SDK FFX **signées par AMD** sont
+  chargées dans le processus. Méthode publique du bridge : copier `amd_fidelityfx_loader_dx12.dll` et
+  `amd_fidelityfx_upscaler_dx12.dll` du FSR SDK 2.3 (`Kits/FidelityFX/signedbin/`), renommées
+  `amd_fidelityfx_loader_vk.dll` et `amd_fidelityfx_upscaler_vk.dll`, et les charger avant d'interroger
+  le pilote. Le pilote déduit aussi la version du SDK de la première DLL vérifiée.
+- **Export** : `UpdateFfxApiProviderEx(provider*, taille, options*)` (et `UpdateFfxApiProvider` sans options).
+- **Structure provider v2** (x64) : `version` u32 = 2 ; remplissage ; `descriptor_type` u64
+  (`0x10000` = création d'upscaler) ; puis en sortie : identifiant u64, nom (char*), et pointeurs
+  `can_provide`, `create_context`, `destroy_context`, `configure`, `query`, `dispatch`.
+- **Chaîne d'options** : nœud { type de valeur u32 (0 = booléen), identifiant u32 (0 = activer l'upscaler),
+  valeur u8, remplissage, `next` } ; l'upscaler doit être activé explicitement.
+- **Identifiant attendu pour FSR 4.1.2** : `0xF5A5CA1E81001002`.
+- **Création du contexte** : en-tête upscale (`0x10000`) chaîné avec la description du backend Vulkan
+  au type SDK 2.x `0x01000003` (même disposition que `ffxCreateBackendVKDesc`) et une description de
+  version upscale `0x1000B` (versions acceptées 4.0.0 à 4.1.2).
+- **Shaders et RADV** : les shaders du pilote déclarent des images en float 16 bits que seul le pilote AMD
+  accepte ; il faut réécrire ces types en float 32 bits dans le SPIR-V reçu par `vkCreateShaderModule`
+  (via le `vkGetDeviceProcAddr` passé au provider).
+- **Fonctions Vulkan requises (FP8, RDNA 4)** : `VK_KHR_cooperative_matrix`, `VK_EXT_shader_float8`,
+  `VK_NV_cooperative_matrix2` (conversions ; sous RADV, variable d'environnement
+  `radv_cooperative_matrix2_nv=true`), `VK_KHR_shader_float16_int8`, `VK_KHR_16bit_storage`,
+  `VK_KHR_variable_pointers`, `VK_KHR_vulkan_memory_model`, `VK_EXT_subgroup_size_control`.
+  Pour INT8/Lite (Deck) : à établir au test M10.1.
+- **Modèle choisi par le pilote selon le GPU** (logique reproduite par OptiScaler) : RDNA 4 → FP8 ;
+  RDNA 3 → INT8 ; RDNA 2 de bureau → INT8-2 ; **Van Gogh (Steam Deck)** et Strix Point → **INT8 Lite**.
+  Sous Proton, la détection de la puce peut échouer (le patch Proton-CachyOS force Lite).
+- **Fragilité** : interface interne du pilote, liée à sa version (le bridge vérifie l'empreinte de
+  `amdvkffx64.dll`). Vérifier l'identifiant et échouer proprement si la version change.
+
+### 8.2 Repli : fsr4-vk
+
+- [fsr4-vk](https://github.com/Astyyyyy/fsr4-vk) : implémentation Vulkan indépendante de FSR 4.1.1 (FP8 et
+  INT8, sans Lite), API FFX standard, annonce « 4.1.1 Vulkan Auto / INT8 / FP8 ». Exige
+  `VK_EXT_descriptor_buffer`, buffer device address, synchronization2 sur le device.
+- Licence GPL-3.0-only : DLL séparée, compilée et installée par l'utilisateur, chargée si présente ;
+  jamais incluse dans le dépôt ni les binaires d'AK-FSR.
+- Autre repli possible : backend DX12 via vkd3d-proton, où Proton (`FSR4_UPGRADE=1`, `upscalers.py` des
+  protonfixes) installe `amdxcffx64.dll` dans le préfixe ; demande un pont DX11↔DX12 (textures et fences
+  partagées entre DXVK et vkd3d-proton).
+
+### 8.3 Essais avec OptiScaler (historique)
 
 - FSR 4 est disponible sans code supplémentaire (constaté le 26/10/2026 sur PC) avec **OptiScaler
   nightly** chargé dans le processus : le chargeur de `amd_fidelityfx_vk.dll` (SDK v1.1.4) liste alors
@@ -255,6 +300,9 @@ Ne pas passer au suivant sans validation.
 Projet personnel. On étudie et réimplémente des **méthodes** (passes, buffers, logique) :
 
 - Mod DLAA (Zorkanne33) : aucun code ni binaire repris ou distribué.
+- OptiScaler (GPL-3.0) et FSR4-Vulkan-Bridge (SemiRealProductions, sans licence) : sources des faits
+  d'interface du §8.1 ; **aucun code repris**, crédités dans le README comme références.
+- DLL AMD (`amdvkffx64.dll`, DLL signées du SDK) : propriétaires, fournies par l'utilisateur, jamais dans le dépôt.
 - fsr4-vk (Astyyyyy, GPL-3.0-only) : chargé dynamiquement s'il est présent, jamais redistribué avec AK-FSR.
 - Luma Framework (Filippo Tarpini et contributeurs) : idées reprises (§4.2). Tout code repris doit être
   signalé en commentaire et crédité dans le README, conformément à sa licence.
