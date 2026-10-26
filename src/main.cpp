@@ -7,6 +7,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <utility>
 
 #include "frame_dump.hpp"
 #include "insertion.hpp"
@@ -53,6 +54,31 @@ void on_init_swapchain(reshade::api::swapchain *swapchain, bool resize) {
 void on_reshade_present(reshade::api::effect_runtime *runtime) {
   akfsr::jitter::on_present();
   if (runtime->is_key_pressed(kDumpFrameKey)) akfsr::dump::request_capture();
+  const uint32_t toggle = akfsr::insertion::get_toggle_key();
+  if (toggle != 0 && runtime->is_key_pressed(toggle)) akfsr::insertion::toggle_bypass();
+}
+
+// Touches proposées pour l'on/off (F10 est prise par la capture, Home par l'overlay de ReShade).
+constexpr std::pair<uint32_t, const char *> kToggleKeys[] = {
+    {0, "désactivée"}, {VK_F5, "F5"}, {VK_F6, "F6"}, {VK_F7, "F7"},  {VK_F8, "F8"},
+    {VK_F9, "F9"},     {VK_F11, "F11"}, {VK_F12, "F12"}, {VK_END, "Fin"}, {VK_NEXT, "Page suiv."},
+};
+
+void toggle_key_row() {
+  const uint32_t key = akfsr::insertion::get_toggle_key();
+  const char *current = "?";
+  for (const auto &[vk, name] : kToggleKeys)
+    if (vk == key) current = name;
+  ImGui::SetNextItemWidth(140);
+  if (ImGui::BeginCombo("Touche on/off (M7)", current)) {
+    for (const auto &[vk, name] : kToggleKeys)
+      if (ImGui::Selectable(name, vk == key)) akfsr::insertion::set_toggle_key(vk);
+    ImGui::EndCombo();
+  }
+  if (akfsr::insertion::bypassed()) {
+    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "AK-FSR coupé par la touche");
+  }
 }
 
 void pass_row(const char *name, const akfsr::passes::pass_status &s) {
@@ -119,6 +145,7 @@ void on_overlay(reshade::api::effect_runtime *) {
   ImGui::SameLine();
   changed |= ImGui::RadioButton("Test : moitié dupliquée", &mode, 2);
   if (changed) akfsr::insertion::set_mode(static_cast<akfsr::insertion::mode>(mode));
+  toggle_key_row();
 
   auto fsr_settings = akfsr::insertion::get_fsr_settings();
   bool fsr_changed = ImGui::Checkbox("Vue de debug FSR", &fsr_settings.debug_view);

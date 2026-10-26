@@ -27,6 +27,13 @@ void set_mode(mode m);
 fsr::settings get_fsr_settings();
 void set_fsr_settings(const fsr::settings &s);
 void set_shader_patches_enabled(bool enabled);  // + sauvegarde (voir passes::set_shader_patches_enabled)
+
+// M7 : touche on/off (comparaison en jeu). 0 = désactivée (défaut). La bascule n'est pas sauvegardée :
+// elle force temporairement le mode Off, le mode choisi dans l'onglet est conservé.
+uint32_t get_toggle_key();
+void set_toggle_key(uint32_t vk);
+void toggle_bypass();
+bool bypassed();
 // Les réglages (mode, options FSR, patchs) sont chargés depuis ReShade.ini [AK-FSR] et sauvegardés à
 // chaque modification depuis l'overlay.
 
