@@ -5,6 +5,7 @@
 #include <ffx_api/ffx_upscale.h>
 #include <ffx_api/vk/ffx_api_vk.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -80,6 +81,17 @@ std::wstring addon_dir() {
   return path;
 }
 
+std::string model_label(std::string name) {
+  for (char &c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  auto has = [&](const char *s) { return name.find(s) != std::string::npos; };
+  if (has("fp8")) return "FP8";
+  if (has("int8") && has("lite")) return "INT8 Lite";
+  if (has("int8_2") || has("int82") || has("int8-2")) return "INT8-2";
+  if (has("int8")) return "INT8";
+  if (has("lite")) return "Lite";
+  return "";
+}
+
 // Nom de modèle dans les chaînes du SPIR-V (points d'entrée, OpString, OpName) : « fsr4_model… ».
 void note_model(const uint32_t *code, size_t words) {
   for (size_t i = 5; i < words;) {
@@ -93,6 +105,7 @@ void note_model(const uint32_t *code, size_t words) {
         std::lock_guard lock(g_mutex);
         if (g_info.model_seen.empty()) {
           g_info.model_seen = name;
+          g_info.model = model_label(name);
           log(reshade::log::level::info, "modèle relevé dans les shaders : " + name);
         }
         return;

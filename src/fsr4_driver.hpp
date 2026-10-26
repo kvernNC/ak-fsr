@@ -36,7 +36,8 @@ struct info {
   std::string status;          // état ou raison de l'échec
   std::string provider_name;   // nom donné par le pilote
   uint64_t provider_id = 0;
-  std::string model_seen;      // nom de modèle relevé dans les shaders du pilote (fp8, int8, lite…)
+  std::string model_seen;      // nom de modèle relevé dans les shaders du pilote (fsr4_model_…)
+  std::string model;           // M10.3 : FP8, INT8, INT8-2, INT8 Lite (déduit de model_seen), vide si inconnu
   uint32_t shaders = 0, shaders_rewritten = 0, shader_failures = 0;
 };
 info get_info();

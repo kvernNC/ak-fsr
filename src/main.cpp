@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "frame_dump.hpp"
+#include "fsr4_driver.hpp"
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
@@ -187,16 +188,25 @@ void on_overlay(reshade::api::effect_runtime *) {
   bool patches = akfsr::passes::shader_patches_enabled();
   if (ImGui::Checkbox("Shaders corrigés (M6)", &patches)) akfsr::insertion::set_shader_patches_enabled(patches);
   const auto fsr_info = akfsr::fsr::get_info();
-  if (!fsr_info.versions.empty()) {
+  // M10.3 : versions de amd_fidelityfx_vk.dll (2.3.3, 3.1.4…) + FSR 4.1.2 du provider pilote.
+  auto versions = fsr_info.versions;
+  const auto driver = akfsr::fsr4::get_info();
+  if (fsr_settings.fsr4_driver) {
+    std::string label = akfsr::fsr4::kDriverVersionName;
+    if (driver.tried && !driver.ok) label += " - indisponible";
+    else if (!driver.model.empty()) label += " - " + driver.model;
+    versions.emplace_back(akfsr::fsr4::kDriverVersionId, label);
+  }
+  if (!versions.empty() && fsr_settings.fsr_backend == akfsr::fsr::backend::vulkan) {
     std::string current = "défaut (" + fsr_info.provider + ")";
-    for (const auto &[id, name] : fsr_info.versions)
+    for (const auto &[id, name] : versions)
       if (id == fsr_settings.version_id) current = name;
     if (ImGui::BeginCombo("Version FSR", current.c_str())) {
       if (ImGui::Selectable("défaut", fsr_settings.version_id == 0)) {
         fsr_settings.version_id = 0;
         fsr_changed = true;
       }
-      for (const auto &[id, name] : fsr_info.versions) {
+      for (const auto &[id, name] : versions) {
         if (ImGui::Selectable(name.c_str(), fsr_settings.version_id == id)) {
           fsr_settings.version_id = id;
           fsr_changed = true;
@@ -254,6 +264,13 @@ void on_overlay(reshade::api::effect_runtime *) {
   }
   if (fsr_changed) akfsr::insertion::set_fsr_settings(fsr_settings);
   if (!fsr_info.provider.empty()) ImGui::Text("Version utilisée : %s", fsr_info.provider.c_str());
+  if (fsr_settings.fsr4_driver && driver.ok)
+    ImGui::TextWrapped("FSR 4 pilote : %s (« %s »), modèle utilisé : %s, shaders %u dont %u réécrits, %u échecs",
+                driver.status.c_str(), driver.provider_name.c_str(),
+                driver.model.empty() ? (driver.model_seen.empty() ? "inconnu" : driver.model_seen.c_str())
+                                     : driver.model.c_str(),
+                driver.shaders,
+                driver.shaders_rewritten, driver.shader_failures);
   if (!fsr_info.fsr4_status.empty())
     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 pilote indisponible, repli sur FSR 3.1 : %s",
                        fsr_info.fsr4_status.c_str());

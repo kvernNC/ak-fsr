@@ -146,3 +146,16 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   si possible, `PROTON_LOG=1`. Lignes utiles : `réécriture SPIR-V impossible : …`.
 - Deck (M10.1/M10.2) : même installation, sans `radv_cooperative_matrix2_nv`. Relever les extensions
   « absentes du GPU », le nom de modèle relevé, et si le contexte se crée.
+
+## 9. M10.3 — Menu « Version FSR » (2.3.3 / 3.1.4 / 4.1.2)
+
+- Prérequis : M10.2 installé, `Fsr4Driver=1`, backend Vulkan (`Backend=0` ; le menu est masqué en DX11).
+- Menu **« Version FSR »** : `défaut`, `3.1.4`, `2.3.3` (amd_fidelityfx_vk.dll), et
+  `4.1.2 (provider pilote)` suivi du modèle (`- FP8`, `- INT8`, `- INT8-2`, `- INT8 Lite`) dès qu'il est
+  relevé dans les shaders du pilote, ou `- indisponible` après un échec.
+- Observer : bascule 2.3.3 → 3.1.4 → 4.1.2 → 3.1.4 en jeu, **sans crash** (contexte recréé à chaque fois,
+  log `création du contexte FSR (version demandée …)` puis `contexte FSR créé …`). Mesurer les fps de
+  chaque version au même endroit (PC et Deck). Ligne « FSR 4 pilote : contexte créé (« nom »), modèle
+  utilisé : …, shaders N dont M réécrits, 0 échecs ».
+- Si 4.1.2 échoue : ligne orange « FSR 4 pilote indisponible, repli sur FSR 3.1 : … » ; le menu reste
+  utilisable pour revenir à 3.1.4.

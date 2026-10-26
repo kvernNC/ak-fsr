@@ -13,6 +13,7 @@ Branche de travail autonome (pas de push). Un commit par sous-étape ; procédur
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
 | M8.4 biais de LOD des textures | codé, à tester | `LodBias` |
 | M10.2 provider FSR 4 du pilote | codé, à tester (DLL AMD à fournir) | `Fsr4Driver`, `Version` |
+| M10.3 menu Version FSR (2 / 3 / 4) | codé, à tester | `Version` |
 
 ## Blocages
 
