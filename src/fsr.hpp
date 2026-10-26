@@ -20,6 +20,7 @@ inline constexpr size_t kViewFloats = 88;
 using view_data = std::array<float, kViewFloats>;
 
 enum class prev_matrix : int { automatic = 0, cb = 1, memory = 2 };
+enum class backend : int { vulkan = 0, dx11 = 1 };  // M8.2 : backend DX11 natif de FidelityFX
 
 struct settings {
   bool debug_view = false;   // vue de debug intégrée à FSR
@@ -33,6 +34,7 @@ struct settings {
   bool highlights = false;        // M7 : hautes lumières sorties de FSR puis rajoutées
   float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
   bool smaa_insertion = false;    // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
+  backend fsr_backend = backend::vulkan;  // M8.2
 };
 
 struct frame_inputs {
@@ -53,6 +55,8 @@ struct info {
   float jitter_px_x = 0, jitter_px_y = 0;  // jitter relu dans le CB View (pixels), transmis à FSR
   float prev_mismatch = -1;                // écart max entre ViewProj précédente du CB et mémorisée (-1 : n/a)
   bool prev_from_memory = false;
+  std::string dx11_status;  // M8.2 : état du backend DX11
+  double dx11_cpu_ms = 0;
 };
 info get_info();
 

@@ -5,3 +5,4 @@ deck/
 steam-*.log
 third_party/ffx-api/bin/
 re/
+third_party/ffx-dx11/

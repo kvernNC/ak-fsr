@@ -11,6 +11,8 @@
 
 #include <reshade.hpp>
 
+#include "fsr_dx11.hpp"
+#include "fsr_params.hpp"
 #include "jitter.hpp"
 #include "shaders/fsr_prepare.spv.h"
 #include "vk_bridge.hpp"
@@ -32,15 +34,6 @@ struct ffx_functions {
   PfnFfxQuery query = nullptr;
 } ffx;
 
-struct push_constants {
-  float reproj[16];  // colonne par colonne (mat4 GLSL)
-  float size[2];
-  float inv_size[2];
-  float jitter_delta_uv[2];  // jitter courant - précédent (UV), à ajouter à la vélocité des objets
-  uint32_t zero_motion;
-  uint32_t use_objects;
-};
-
 struct state {
   bool tried_dll = false;
   bool dll_ok = false;
@@ -59,12 +52,16 @@ struct state {
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
   uint32_t width = 0, height = 0;
   image color_in, color_out, depth_src, velocity_src, depth, motion;
+} g;
+
+// Historique de la caméra, commun aux deux backends.
+struct history {
   double last_run_ms = 0;
   float prev_jx = 0, prev_jy = 0;  // jitter (NDC) relu à la frame précédente
   float mem_rows[16] = {};         // ViewProj sans jitter de la frame précédente (lignes)
   float mem_t[3] = {};             // origine du repère translaté de cette frame (c21.xyz)
   bool mem_valid = false;
-} g;
+} h;
 
 std::mutex g_info_mutex;
 info g_info;
@@ -358,7 +355,7 @@ bool ensure_context(const settings &s) {
   }
   g.ctx_auto_exposure = s.auto_exposure;
   g.ctx_version = s.version_id;
-  g.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
+  h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 
   ffxQueryGetProviderVersion provider{};
   provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
@@ -426,14 +423,14 @@ bool reprojection(const float *cur_rows, const float *prev_rows, float out[16]) 
 }
 
 // RT4 doit avoir le format et la taille de nos images pour la copie D3D11.
-bool velocity_compatible(ID3D11Resource *velocity) {
+bool velocity_compatible(ID3D11Resource *velocity, uint32_t width, uint32_t height) {
   if (velocity == nullptr) return false;
   ID3D11Texture2D *tex = nullptr;
   if (FAILED(velocity->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&tex)))) return false;
   D3D11_TEXTURE2D_DESC desc;
   tex->GetDesc(&desc);
   tex->Release();
-  return desc.Format == DXGI_FORMAT_R16G16_FLOAT && desc.Width == g.width && desc.Height == g.height &&
+  return desc.Format == DXGI_FORMAT_R16G16_FLOAT && desc.Width == width && desc.Height == height &&
          desc.SampleDesc.Count == 1 && desc.ArraySize == 1;
 }
 
@@ -442,11 +439,90 @@ FfxApiResource ffx_resource(const image &img, uint32_t state) {
                              ffxApiGetImageResourceDescriptionVK(img.handle, img.info, 0), state);
 }
 
+// Paramètres de la frame (jitter, matrices, vecteurs de la caméra), communs aux deux backends.
+void compute_params(const frame_inputs &in, const settings &s, uint32_t width, uint32_t height, frame_params &p) {
+  const double t0 = now_ms();
+  const double delta = h.last_run_ms > 0 ? t0 - h.last_run_ms : 0.0;
+  const bool reset = h.last_run_ms == 0 || delta > 250.0;  // reprise après une pause (vidéo, menu, mode off)
+  h.last_run_ms = t0;
+  p.start_ms = t0;
+  p.reset = reset;
+  p.frame_ms = reset ? 16.6f : static_cast<float>(delta);
+
+  // Jitter réellement utilisé pour cette frame, relu dans la ViewProj ; retiré des matrices courante et
+  // précédente (celle-ci avec le jitter relu à la frame précédente) pour des vecteurs sans jitter.
+  view_data view = in.view;
+  float jx = 0, jy = 0;
+  jitter::recover_from_view(view.data(), jx, jy);
+  const float prev_jx = reset ? jx : h.prev_jx, prev_jy = reset ? jy : h.prev_jy;
+  for (int i = 0; i < 4; ++i) {
+    float *cur = &view[i * 4], *prev = &view[16 + i * 4];
+    cur[0] -= cur[3] * jx;
+    cur[1] -= cur[3] * jy;
+    prev[0] -= prev[3] * prev_jx;
+    prev[1] -= prev[3] * prev_jy;
+  }
+  h.prev_jx = jx;
+  h.prev_jy = jy;
+
+  // Matrice précédente : celle du CB (c4..c7) ou celle mémorisée à la frame précédente, ramenée dans le
+  // repère translaté courant (origine c21.xyz) : row3 += Σk (t_prev - t_cur)k · rowk.
+  const float t_cur[3] = {view[84], view[85], view[86]};
+  float mem_prev[16];
+  const bool mem_ok = h.mem_valid && !reset;
+  if (mem_ok) {
+    std::memcpy(mem_prev, h.mem_rows, sizeof(mem_prev));
+    for (int k = 0; k < 3; ++k)
+      for (int c = 0; c < 4; ++c) mem_prev[12 + c] += (h.mem_t[k] - t_cur[k]) * h.mem_rows[k * 4 + c];
+  }
+  float mismatch = 0;
+  if (mem_ok)
+    for (int i = 0; i < 16; ++i) mismatch = std::max(mismatch, std::fabs(mem_prev[i] - view[16 + i]));
+  const bool use_memory = mem_ok && s.prev_source != prev_matrix::cb;
+  std::memcpy(h.mem_rows, view.data(), sizeof(h.mem_rows));  // courante sans jitter, pour la frame suivante
+  std::memcpy(h.mem_t, t_cur, sizeof(h.mem_t));
+  h.mem_valid = true;
+  p.jitter_px_x = jx * static_cast<float>(width) * 0.5f;
+  p.jitter_px_y = -jy * static_cast<float>(height) * 0.5f;
+
+  push_constants &pc = p.pc;
+  pc = {};
+  p.have_reproj = reprojection(view.data(), use_memory ? mem_prev : view.data() + 16, pc.reproj);
+  pc.size[0] = static_cast<float>(width);
+  pc.size[1] = static_cast<float>(height);
+  pc.inv_size[0] = 1.0f / pc.size[0];
+  pc.inv_size[1] = 1.0f / pc.size[1];
+  pc.zero_motion = (s.zero_motion || !p.have_reproj) ? 1u : 0u;
+  // Vélocité des objets (RT4) : calculée par le jeu avec les ViewProj jitterées c0..c3 / c4..c7.
+  p.objects = s.object_velocity && velocity_compatible(in.velocity, width, height);
+  if (p.objects) {
+    float pjx = 0, pjy = 0;
+    jitter::recover_from_view(in.view.data() + 16, pjx, pjy);
+    pc.jitter_delta_uv[0] = (jx - pjx) * 0.5f;
+    pc.jitter_delta_uv[1] = -(jy - pjy) * 0.5f;
+    pc.use_objects = 1u;
+  }
+
+  // Échelle verticale de la projection et plan proche (clip.z = clip.w - near), vérifiables dans l'overlay.
+  const float sx = std::sqrt(view[0] * view[0] + view[4] * view[4] + view[8] * view[8]);
+  const float sy = std::sqrt(view[1] * view[1] + view[5] * view[5] + view[9] * view[9]);
+  p.fov = sy > 0 ? 2.0f * std::atan(1.0f / sy) : 1.0f;
+  p.near_plane = view[15] - view[14];
+  jitter::set_render_size(width, height);
+  jitter::learn_main_view(sx, sy, p.near_plane);
+  std::lock_guard lock(g_info_mutex);
+  g_info.fov_deg = p.fov * 57.29578f;
+  g_info.near_plane = p.near_plane;
+  g_info.jitter_px_x = p.jitter_px_x;
+  g_info.jitter_px_y = p.jitter_px_y;
+  g_info.prev_mismatch = mem_ok ? mismatch : -1.0f;
+  g_info.prev_from_memory = use_memory;
+}
+
 }  // namespace
 
 bool run(const frame_inputs &in, const settings &s) {
-  if (!ready() || in.color == nullptr || in.depth == nullptr) return false;
-  if (!load_dll() || !create_pipeline()) return false;
+  if (in.color == nullptr || in.depth == nullptr) return false;
 
   ID3D11Texture2D *color_tex = nullptr;
   if (FAILED(in.color->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&color_tex)))) return false;
@@ -466,82 +542,36 @@ bool run(const frame_inputs &in, const settings &s) {
       return false;
     }
   }
+
+  frame_params p;
+  if (s.fsr_backend == backend::dx11) {
+    compute_params(in, s, desc.Width, desc.Height, p);
+    std::string error;
+    const double t0 = now_ms();
+    const bool ok = dx11::run(in, s, p, desc, error);
+    {
+      std::lock_guard lock(g_info_mutex);
+      g_info.dx11_status = ok ? "actif" : error;
+      g_info.dx11_cpu_ms = now_ms() - t0;
+      if (ok) g_info.provider = "3.1 (backend DX11 natif)";
+    }
+    if (!ok) {
+      set_fsr_status("backend DX11 : " + error, true);
+      h.last_run_ms = 0;
+      return false;
+    }
+    set_fsr_status(p.have_reproj ? "actif (DX11)" : "actif (DX11, matrice non inversible : vecteurs nuls)", false);
+    return true;
+  }
+
+  if (!ready()) return false;
+  if (!load_dll() || !create_pipeline()) return false;
   if (!ensure_images(desc.Format, desc.Width, desc.Height) || !ensure_context(s)) return false;
-
-  const double t0 = now_ms();
-  const double delta = g.last_run_ms > 0 ? t0 - g.last_run_ms : 0.0;
-  const bool reset = g.last_run_ms == 0 || delta > 250.0;  // reprise après une pause (vidéo, menu, mode off)
-  g.last_run_ms = t0;
-
-  // Jitter réellement utilisé pour cette frame, relu dans la ViewProj ; retiré des matrices courante et
-  // précédente (celle-ci avec le jitter relu à la frame précédente) pour des vecteurs sans jitter.
-  view_data view = in.view;
-  float jx = 0, jy = 0;
-  jitter::recover_from_view(view.data(), jx, jy);
-  const float prev_jx = reset ? jx : g.prev_jx, prev_jy = reset ? jy : g.prev_jy;
-  for (int i = 0; i < 4; ++i) {
-    float *cur = &view[i * 4], *prev = &view[16 + i * 4];
-    cur[0] -= cur[3] * jx;
-    cur[1] -= cur[3] * jy;
-    prev[0] -= prev[3] * prev_jx;
-    prev[1] -= prev[3] * prev_jy;
-  }
-  g.prev_jx = jx;
-  g.prev_jy = jy;
-
-  // Matrice précédente : celle du CB (c4..c7) ou celle mémorisée à la frame précédente, ramenée dans le
-  // repère translaté courant (origine c21.xyz) : row3 += Σk (t_prev - t_cur)k · rowk.
-  const float t_cur[3] = {view[84], view[85], view[86]};
-  float mem_prev[16];
-  const bool mem_ok = g.mem_valid && !reset;
-  if (mem_ok) {
-    std::memcpy(mem_prev, g.mem_rows, sizeof(mem_prev));
-    for (int k = 0; k < 3; ++k)
-      for (int c = 0; c < 4; ++c) mem_prev[12 + c] += (g.mem_t[k] - t_cur[k]) * g.mem_rows[k * 4 + c];
-  }
-  float mismatch = 0;
-  if (mem_ok)
-    for (int i = 0; i < 16; ++i) mismatch = std::max(mismatch, std::fabs(mem_prev[i] - view[16 + i]));
-  const bool use_memory = mem_ok && s.prev_source != prev_matrix::cb;
-  std::memcpy(g.mem_rows, view.data(), sizeof(g.mem_rows));  // courante sans jitter, pour la frame suivante
-  std::memcpy(g.mem_t, t_cur, sizeof(g.mem_t));
-  g.mem_valid = true;
-  const float jitter_px_x = jx * static_cast<float>(g.width) * 0.5f;
-  const float jitter_px_y = -jy * static_cast<float>(g.height) * 0.5f;
-
-  push_constants pc{};
-  const bool have_reproj = reprojection(view.data(), use_memory ? mem_prev : view.data() + 16, pc.reproj);
-  pc.size[0] = static_cast<float>(g.width);
-  pc.size[1] = static_cast<float>(g.height);
-  pc.inv_size[0] = 1.0f / pc.size[0];
-  pc.inv_size[1] = 1.0f / pc.size[1];
-  pc.zero_motion = (s.zero_motion || !have_reproj) ? 1u : 0u;
-  // Vélocité des objets (RT4) : calculée par le jeu avec les ViewProj jitterées c0..c3 / c4..c7.
-  const bool objects = s.object_velocity && velocity_compatible(in.velocity);
-  if (objects) {
-    float pjx = 0, pjy = 0;
-    jitter::recover_from_view(in.view.data() + 16, pjx, pjy);
-    pc.jitter_delta_uv[0] = (jx - pjx) * 0.5f;
-    pc.jitter_delta_uv[1] = -(jy - pjy) * 0.5f;
-    pc.use_objects = 1u;
-  }
-
-  // Échelle verticale de la projection et plan proche (clip.z = clip.w - near), vérifiables dans l'overlay.
-  const float sx = std::sqrt(view[0] * view[0] + view[4] * view[4] + view[8] * view[8]);
-  const float sy = std::sqrt(view[1] * view[1] + view[5] * view[5] + view[9] * view[9]);
-  const float fov = sy > 0 ? 2.0f * std::atan(1.0f / sy) : 1.0f;
-  const float near_plane = view[15] - view[14];
-  jitter::set_render_size(g.width, g.height);
-  jitter::learn_main_view(sx, sy, near_plane);
-  {
-    std::lock_guard lock(g_info_mutex);
-    g_info.fov_deg = fov * 57.29578f;
-    g_info.near_plane = near_plane;
-    g_info.jitter_px_x = jitter_px_x;
-    g_info.jitter_px_y = jitter_px_y;
-    g_info.prev_mismatch = mem_ok ? mismatch : -1.0f;
-    g_info.prev_from_memory = use_memory;
-  }
+  compute_params(in, s, g.width, g.height, p);
+  const double t0 = p.start_ms;
+  const push_constants &pc = p.pc;
+  const bool objects = p.objects;
+  const bool reset = p.reset;
 
   // 1) Entrées du jeu -> nos images partagées (copies par DXVK).
   ID3D11DeviceContext *imm = ctx().immediate;
@@ -589,18 +619,18 @@ bool run(const frame_inputs &in, const settings &s) {
   d.depth = ffx_resource(g.depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.motionVectors = ffx_resource(g.motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.output = ffx_resource(g.color_out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
-  d.jitterOffset = {jitter_px_x, jitter_px_y};
+  d.jitterOffset = {p.jitter_px_x, p.jitter_px_y};
   d.motionVectorScale = {static_cast<float>(g.width), static_cast<float>(g.height)};
   d.renderSize = {g.width, g.height};
   d.upscaleSize = {g.width, g.height};
   d.enableSharpening = s.sharpness > 0.0f;
   d.sharpness = s.sharpness;
-  d.frameTimeDelta = reset ? 16.6f : static_cast<float>(delta);  // millisecondes
+  d.frameTimeDelta = p.frame_ms;  // millisecondes
   d.preExposure = 1.0f;
   d.reset = reset;
-  d.cameraNear = near_plane > 0 ? near_plane : 10.0f;
+  d.cameraNear = p.near_plane > 0 ? p.near_plane : 10.0f;
   d.cameraFar = FLT_MAX;  // profondeur infinie (exigé par FFX avec DEPTH_INFINITE)
-  d.cameraFovAngleVertical = fov;
+  d.cameraFovAngleVertical = p.fov;
   d.viewSpaceToMetersFactor = 0.01f;  // unités UE3 : centimètres
   d.flags = s.debug_view ? FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW : 0;
   const ffxReturnCode_t rc = ffx.dispatch(&g.context, &d.header);
@@ -621,7 +651,7 @@ bool run(const frame_inputs &in, const settings &s) {
 
   // 4) Résultat -> couleur du jeu.
   imm->CopySubresourceRegion(in.output != nullptr ? in.output : in.color, 0, 0, 0, 0, g.color_out.texture, 0, nullptr);
-  set_fsr_status(have_reproj ? "actif" : "actif (matrice non inversible : vecteurs nuls)", false);
+  set_fsr_status(p.have_reproj ? "actif" : "actif (matrice non inversible : vecteurs nuls)", false);
   return true;
 }
 

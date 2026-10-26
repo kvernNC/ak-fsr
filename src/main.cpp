@@ -202,6 +202,18 @@ void on_overlay(reshade::api::effect_runtime *) {
     fsr_changed = true;
     akfsr::passes::rearm_smaa_insertion();
   }
+  {
+    int backend = static_cast<int>(fsr_settings.fsr_backend);
+    ImGui::TextUnformatted("Backend FSR :");
+    ImGui::SameLine();
+    bool backend_changed = ImGui::RadioButton("Vulkan (interop DXVK)", &backend, 0);
+    ImGui::SameLine();
+    backend_changed |= ImGui::RadioButton("DX11 natif (M8.2)", &backend, 1);
+    if (backend_changed) {
+      fsr_settings.fsr_backend = static_cast<akfsr::fsr::backend>(backend);
+      fsr_changed = true;
+    }
+  }
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR (M7)", &fsr_settings.highlights);
   if (fsr_settings.highlights) {
     ImGui::SameLine();
@@ -213,6 +225,9 @@ void on_overlay(reshade::api::effect_runtime *) {
   }
   if (fsr_changed) akfsr::insertion::set_fsr_settings(fsr_settings);
   if (!fsr_info.provider.empty()) ImGui::Text("Version utilisée : %s", fsr_info.provider.c_str());
+  if (fsr_settings.fsr_backend == akfsr::fsr::backend::dx11)
+    ImGui::Text("Backend DX11 : %s | CPU %.3f ms", fsr_info.dx11_status.empty() ? "pas encore lancé" :
+                fsr_info.dx11_status.c_str(), fsr_info.dx11_cpu_ms);
   if (fsr_info.prev_mismatch >= 0)
     ImGui::Text("Écart ViewProj précédente CB / mémorisée : %.6f (utilisée : %s)", fsr_info.prev_mismatch,
                 fsr_info.prev_from_memory ? "mémorisée" : "CB");

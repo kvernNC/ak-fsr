@@ -62,3 +62,24 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - En cas d'échec : `insertion au SMAA en échec, repli sur 0xB2A276FD (option désarmée)` précédé d'une
   ligne `FSR : …` (ex. `sortie incompatible avec l'entrée (format X / Y)`). L'onglet affiche « désarmée » ;
   décocher/recocher l'option pour réessayer.
+
+## 5. M8.2 — Backend FSR 3 DX11 natif
+
+- Installation : copier aussi **`ak-fsr-dx11.dll`** à côté de l'addon (`scripts/deploy.sh` le fait).
+  Elle dépend de `msvcp140.dll` / `vcruntime140.dll` / `vcruntime140_1.dll` (fournies par Wine/Proton ;
+  sinon `protontricks 1690000 vcrun2022`).
+- Option : **« Backend FSR : DX11 natif (M8.2) »** ; `ReShade.ini` : `Backend=1` (0 = Vulkan, défaut).
+- Principe : FSR 3 (FidelityFX, backend DX11 précompilé par Luma) appelé directement sur le contexte D3D11
+  du jeu : ni interop Vulkan, ni copies vers Vulkan, ni `FlushRenderingCommands`. L'état D3D11 du jeu est
+  mis de côté pendant le travail (`SwapDeviceContextState`).
+- Observer : onglet « Version utilisée : 3.1 (backend DX11 natif) », « Backend DX11 : actif | CPU x ms ».
+  Image équivalente au backend Vulkan (comparer à l'arrêt et en mouvement, avec et sans jitter).
+  Les temps GPU « préparation / FSR » de l'onglet ne concernent que le backend Vulkan : comparer les **fps**
+  (et l'overlay de performance du Deck) entre `Backend=0` et `Backend=1`, au même endroit.
+  Critère : coût inférieur au chemin Vulkan sur le Deck.
+- Log attendu : `backend DX11 : ak-fsr-dx11.dll chargée`, puis
+  `backend DX11 : contexte FSR 3 créé : WxH (AA natif), format DXGI 26`.
+- Échecs possibles (image sans AA, rien de cassé ; repasser à `Backend=0`) :
+  `ak-fsr-dx11.dll introuvable … (erreur 126)` → DLL absente ou dépendance VC++ manquante ;
+  `FSR : backend DX11 : …` (SRV sur la profondeur, format sans UAV typée, code FFX) → me transmettre la ligne.
+- Combinable avec M8.1 (`SmaaInsertion=1`) et M7.2.

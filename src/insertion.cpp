@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include "dxvk_interop.hpp"
+#include "fsr_dx11.hpp"
 #include "highlights.hpp"
 #include "jitter.hpp"
 #include "passes.hpp"
@@ -23,6 +24,7 @@ fsr::settings g_fsr_settings;
 
 void on_destroy_device(device *) {
   highlights::shutdown();
+  fsr::dx11::shutdown();
   vk::shutdown();
 }
 
@@ -42,6 +44,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "ToggleKey", g_toggle_key.load());
   reshade::set_config_value(nullptr, kSection, "Highlights", s.highlights);
   reshade::set_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
+  reshade::set_config_value(nullptr, kSection, "Backend", static_cast<int>(s.fsr_backend));
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
@@ -60,6 +63,9 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
   reshade::get_config_value(nullptr, kSection, "Highlights", s.highlights);
   reshade::get_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
+  int backend = 0;
+  reshade::get_config_value(nullptr, kSection, "Backend", backend);
+  s.fsr_backend = backend == 1 ? fsr::backend::dx11 : fsr::backend::vulkan;
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
     std::lock_guard lock(g_settings_mutex);
@@ -84,7 +90,9 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
   }
 
   device *dev = cmd->get_device();
-  if (!vk::init(reinterpret_cast<ID3D11Device *>(dev->get_native()))) {
+  // Backend DX11 (M8.2) : pas d'interop Vulkan.
+  const bool need_vk = m != mode::fsr || get_fsr_settings().fsr_backend == fsr::backend::vulkan;
+  if (need_vk && !vk::init(reinterpret_cast<ID3D11Device *>(dev->get_native()))) {
     if (!g_logged_failure.exchange(true)) {
       reshade::log::message(reshade::log::level::error, ("AK-FSR: interop Vulkan indisponible : " + vk::status()).c_str());
     }
