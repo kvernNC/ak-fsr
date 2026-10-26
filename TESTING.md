@@ -35,3 +35,9 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - Log : `AK-FSR: hautes lumières : actif` à la première frame.
   En cas d'échec : `hautes lumières : compilation des shaders : …`, `… sans UAV typée`, ou
   `… SRV sur la couleur du jeu impossible` → l'image reste celle de FSR sans l'option (rien de cassé).
+
+## 3. M7.3 — RCAS, pluie : rien à tester (voir PROGRESS.md, « Blocages »)
+
+- RCAS : déjà disponible via le curseur « Netteté (RCAS) » (`Sharpness`, RCAS intégré à FSR).
+- Pluie composée après l'AA : non codée (passes de pluie non identifiées). Pour débloquer : sous la pluie,
+  en ville, faire une capture **F10** avec AK-FSR en mode Off et me fournir le dossier `ak-fsr-dumps/…`.
