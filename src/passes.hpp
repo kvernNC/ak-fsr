@@ -42,6 +42,8 @@ struct frame_report {
   // M8.1 : FSR à la place du SMAA du jeu.
   enum class smaa_state : int { off = 0, active, fallback, disarmed } smaa_insertion = smaa_state::off;
   uint64_t smaa_fsr_frames = 0;  // frames où FSR a remplacé le SMAA
+  // M8.3 : dernière cible R16G16_FLOAT effacée (clear_render_target_view), méthode de Luma.
+  found_resource cleared_rg16;
 };
 
 void register_events();

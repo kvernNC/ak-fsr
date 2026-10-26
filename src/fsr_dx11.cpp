@@ -65,6 +65,7 @@ struct state {
   ID3DDeviceContextState *our_state = nullptr;
   void *context = nullptr;
   bool ctx_auto_exposure = false;
+  bool ctx_game_mv = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
   UINT width = 0, height = 0;
   ID3D11Texture2D *depth = nullptr, *motion = nullptr, *output = nullptr;
@@ -195,14 +196,15 @@ bool ensure_textures(ID3D11Device *dev, const D3D11_TEXTURE2D_DESC &color, std::
 }
 
 bool ensure_context(ID3D11Device *dev, const settings &s, std::string &error) {
-  if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure) return true;
+  if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_game_mv == s.game_mv) return true;
   destroy_context();
   akfsr_dx11_create_desc desc{};
   desc.version = AKFSR_DX11_API_VERSION;
   desc.device = dev;
   desc.width = g.width;
   desc.height = g.height;
-  desc.flags = AKFSR_DX11_HDR | AKFSR_DX11_DEPTH_INFINITE | (s.auto_exposure ? AKFSR_DX11_AUTO_EXPOSURE : 0u);
+  desc.flags = AKFSR_DX11_HDR | AKFSR_DX11_DEPTH_INFINITE | (s.auto_exposure ? AKFSR_DX11_AUTO_EXPOSURE : 0u) |
+               (s.game_mv ? AKFSR_DX11_MV_JITTERED : 0u);
   desc.message = ffx_message;
   const int rc = b.create(&desc, &g.context);
   if (rc != 0) {
@@ -211,6 +213,7 @@ bool ensure_context(ID3D11Device *dev, const settings &s, std::string &error) {
     return false;
   }
   g.ctx_auto_exposure = s.auto_exposure;
+  g.ctx_game_mv = s.game_mv;
   char buf[160];
   std::snprintf(buf, sizeof(buf), "AK-FSR: backend DX11 : contexte FSR 3 créé : %ux%u (AA natif), format DXGI %d",
                 g.width, g.height, static_cast<int>(g.format));
@@ -282,12 +285,12 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
     d.context = imm1;
     d.color = in.color;
     d.depth = g.depth;
-    d.motion = g.motion;
+    d.motion = p.game_mv ? in.velocity : g.motion;  // M8.3 : RT4 du jeu telle quelle
     d.output = g.output;
     d.jitter_x = p.jitter_px_x;
     d.jitter_y = p.jitter_px_y;
-    d.mv_scale_x = static_cast<float>(g.width);
-    d.mv_scale_y = static_cast<float>(g.height);
+    d.mv_scale_x = p.mv_scale_x;
+    d.mv_scale_y = p.mv_scale_y;
     d.sharpness = s.sharpness;
     d.frame_ms = p.frame_ms;
     d.reset = p.reset ? 1u : 0u;

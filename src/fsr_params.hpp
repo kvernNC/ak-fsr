@@ -25,6 +25,8 @@ struct frame_params {
   float near_plane = 10.0f, fov = 1.0f;
   bool objects = false;      // vélocité des objets (RT4) utilisée
   bool have_reproj = false;
+  bool game_mv = false;  // M8.3 : RT4 utilisée directement comme vecteurs de mouvement
+  float mv_scale_x = 0, mv_scale_y = 0;
   double start_ms = 0;
 };
 

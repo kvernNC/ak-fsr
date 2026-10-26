@@ -131,6 +131,11 @@ void on_overlay(reshade::api::effect_runtime *) {
   resource_row("profondeur (t0)", r.depth);
   resource_row("vélocité objets (t1)", r.velocity_objects);
   resource_row("vélocité combinée (u0)", r.velocity_combined);
+  resource_row("R16G16F effacée (M8.3)", r.cleared_rg16);
+  if (r.cleared_rg16.handle != 0) {
+    ImGui::SameLine();
+    ImGui::TextUnformatted(r.cleared_rg16.handle == r.velocity_objects.handle ? "= RT4" : "!= RT4");
+  }
   pass_row("CB View (b1)", r.view_cb);
   pass_row("Tonemap", r.tonemap);
   if (r.view_cb_valid && ImGui::TreeNode("CB View c0..c7")) {
@@ -213,6 +218,15 @@ void on_overlay(reshade::api::effect_runtime *) {
       fsr_settings.fsr_backend = static_cast<akfsr::fsr::backend>(backend);
       fsr_changed = true;
     }
+  }
+  fsr_changed |= ImGui::Checkbox("Vecteurs du jeu tels quels (M8.3)", &fsr_settings.game_mv);
+  if (fsr_settings.game_mv) {
+    ImGui::SameLine();
+    fsr_changed |= ImGui::RadioButton("UV", &fsr_settings.game_mv_scale, 0);
+    ImGui::SameLine();
+    fsr_changed |= ImGui::RadioButton("[-1,1]", &fsr_settings.game_mv_scale, 1);
+    ImGui::SameLine();
+    fsr_changed |= ImGui::Checkbox("Y inversé", &fsr_settings.game_mv_flip_y);
   }
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR (M7)", &fsr_settings.highlights);
   if (fsr_settings.highlights) {

@@ -35,6 +35,10 @@ struct settings {
   float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
   bool smaa_insertion = false;    // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
   backend fsr_backend = backend::vulkan;  // M8.2
+  // M8.3 : vélocité du G-buffer (RT4) passée telle quelle à FSR, sans reprojection (jitter annulé par FSR).
+  bool game_mv = false;
+  int game_mv_scale = 0;     // 0 : UV (× taille, lecture de M5) ; 1 : [-1, 1] (× taille / 2, lecture de Luma)
+  bool game_mv_flip_y = false;
 };
 
 struct frame_inputs {

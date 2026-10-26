@@ -307,11 +307,27 @@ bool on_update_buffer(device *, const void *data, resource dst, uint64_t offset,
   return false;
 }
 
+// M8.3 : Luma repère la vélocité du jeu comme la cible R16G16_FLOAT effacée ; on la compare à RT4.
+bool on_clear_rtv(command_list *cmd, resource_view rtv, const float[4], uint32_t, const rect *) {
+  if (!is_immediate(cmd)) return false;
+  const auto res = resolve_view(cmd->get_device(), rtv.handle);
+  if (res.desc.type != resource_type::texture_2d || res.desc.texture.format != format::r16g16_float) return false;
+  std::lock_guard lock(g_report_mutex);
+  if (g_report.cleared_rg16.handle == res.handle) return false;
+  g_report.cleared_rg16 = res;
+  char buf[160];
+  std::snprintf(buf, sizeof(buf), "AK-FSR: cible R16G16_FLOAT effacée : %ux%u, %s", res.desc.texture.width,
+                res.desc.texture.height,
+                res.handle == g_report.velocity_objects.handle ? "c'est RT4 (vélocité des objets)" : "autre que RT4");
+  reshade::log::message(reshade::log::level::info, buf);
+  return false;
+}
+
 // Oublie immédiatement les ressources repérées qui sont libérées par le jeu.
 void on_destroy_resource(device *, resource res) {
   std::lock_guard lock(g_report_mutex);
   for (auto *r : {&g_report.velocity_objects, &g_report.velocity_combined, &g_report.depth, &g_report.scene_color,
-                  &g_report.insertion_depth}) {
+                  &g_report.insertion_depth, &g_report.cleared_rg16}) {
     if (r->handle == res.handle) *r = {};
   }
 }
@@ -365,6 +381,7 @@ void register_events() {
   reshade::register_event<reshade::addon_event::update_buffer_region>(on_update_buffer);
   reshade::register_event<reshade::addon_event::present>(on_present);
   reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
+  reshade::register_event<reshade::addon_event::clear_render_target_view>(on_clear_rtv);
 }
 
 void unregister_events() {
@@ -382,6 +399,7 @@ void unregister_events() {
   reshade::unregister_event<reshade::addon_event::update_buffer_region>(on_update_buffer);
   reshade::unregister_event<reshade::addon_event::present>(on_present);
   reshade::unregister_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
+  reshade::unregister_event<reshade::addon_event::clear_render_target_view>(on_clear_rtv);
 }
 
 }  // namespace akfsr::passes

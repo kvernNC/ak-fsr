@@ -47,6 +47,7 @@ struct state {
 
   ffxContext context = nullptr;
   bool ctx_auto_exposure = false;
+  bool ctx_game_mv = false;
   uint64_t ctx_version = 0;
   bool versions_queried = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
@@ -306,7 +307,9 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height) {
 
 // Contexte FFX : recréé si l'auto-exposition ou la version demandée changent.
 bool ensure_context(const settings &s) {
-  if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_version == s.version_id) return true;
+  if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_version == s.version_id &&
+      g.ctx_game_mv == s.game_mv)
+    return true;
   if (g.context != nullptr) {
     wait_idle();
     destroy_context();
@@ -327,7 +330,8 @@ bool ensure_context(const settings &s) {
   desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
   desc.header.pNext = &backend.header;
   desc.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE | FFX_UPSCALE_ENABLE_DEPTH_INFINITE |
-               (s.auto_exposure ? FFX_UPSCALE_ENABLE_AUTO_EXPOSURE : 0u);
+               (s.auto_exposure ? FFX_UPSCALE_ENABLE_AUTO_EXPOSURE : 0u) |
+               (s.game_mv ? FFX_UPSCALE_ENABLE_MOTION_VECTORS_JITTER_CANCELLATION : 0u);
   desc.maxRenderSize = {g.width, g.height};
   desc.maxUpscaleSize = {g.width, g.height};
   desc.fpMessage = ffx_message;
@@ -354,6 +358,7 @@ bool ensure_context(const settings &s) {
     return false;
   }
   g.ctx_auto_exposure = s.auto_exposure;
+  g.ctx_game_mv = s.game_mv;
   g.ctx_version = s.version_id;
   h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 
@@ -493,8 +498,18 @@ void compute_params(const frame_inputs &in, const settings &s, uint32_t width, u
   pc.inv_size[0] = 1.0f / pc.size[0];
   pc.inv_size[1] = 1.0f / pc.size[1];
   pc.zero_motion = (s.zero_motion || !p.have_reproj) ? 1u : 0u;
+  p.mv_scale_x = static_cast<float>(width);
+  p.mv_scale_y = static_cast<float>(height);
+  // M8.3 : RT4 telle quelle (jitterée), seulement la profondeur à préparer.
+  p.game_mv = s.game_mv && velocity_compatible(in.velocity, width, height);
+  if (p.game_mv) {
+    const float k = s.game_mv_scale == 1 ? 0.5f : 1.0f;
+    p.mv_scale_x *= k;
+    p.mv_scale_y *= s.game_mv_flip_y ? -k : k;
+    pc.zero_motion = 1u;
+  }
   // Vélocité des objets (RT4) : calculée par le jeu avec les ViewProj jitterées c0..c3 / c4..c7.
-  p.objects = s.object_velocity && velocity_compatible(in.velocity, width, height);
+  p.objects = p.game_mv || (s.object_velocity && velocity_compatible(in.velocity, width, height));
   if (p.objects) {
     float pjx = 0, pjy = 0;
     jitter::recover_from_view(in.view.data() + 16, pjx, pjy);
@@ -617,10 +632,10 @@ bool run(const frame_inputs &in, const settings &s) {
   d.commandList = cmd;
   d.color = ffx_resource(g.color_in, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.depth = ffx_resource(g.depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
-  d.motionVectors = ffx_resource(g.motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
+  d.motionVectors = ffx_resource(p.game_mv ? g.velocity_src : g.motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.output = ffx_resource(g.color_out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
   d.jitterOffset = {p.jitter_px_x, p.jitter_px_y};
-  d.motionVectorScale = {static_cast<float>(g.width), static_cast<float>(g.height)};
+  d.motionVectorScale = {p.mv_scale_x, p.mv_scale_y};
   d.renderSize = {g.width, g.height};
   d.upscaleSize = {g.width, g.height};
   d.enableSharpening = s.sharpness > 0.0f;

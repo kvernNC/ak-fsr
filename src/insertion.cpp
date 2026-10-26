@@ -45,6 +45,9 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "Highlights", s.highlights);
   reshade::set_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
   reshade::set_config_value(nullptr, kSection, "Backend", static_cast<int>(s.fsr_backend));
+  reshade::set_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
+  reshade::set_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
+  reshade::set_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
@@ -66,6 +69,9 @@ void load_settings() {
   int backend = 0;
   reshade::get_config_value(nullptr, kSection, "Backend", backend);
   s.fsr_backend = backend == 1 ? fsr::backend::dx11 : fsr::backend::vulkan;
+  reshade::get_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
+  reshade::get_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
+  reshade::get_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
     std::lock_guard lock(g_settings_mutex);

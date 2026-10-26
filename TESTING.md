@@ -83,3 +83,21 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   `ak-fsr-dx11.dll introuvable … (erreur 126)` → DLL absente ou dépendance VC++ manquante ;
   `FSR : backend DX11 : …` (SRV sur la profondeur, format sans UAV typée, code FFX) → me transmettre la ligne.
 - Combinable avec M8.1 (`SmaaInsertion=1`) et M7.2.
+
+## 6. M8.3 — Vecteurs de mouvement du jeu tels quels
+
+- Option : case **« Vecteurs du jeu tels quels (M8.3) »** + échelle « UV » / « [-1,1] » + « Y inversé » ;
+  `ReShade.ini` : `GameMotionVectors=1`, `GameMvScale=0|1`, `GameMvFlipY=0|1`.
+- Principe : la vélocité du G-buffer (RT4, `R16G16_FLOAT`, jitterée) est donnée directement à FSR
+  (annulation du jitter par FSR), sans notre reprojection de la profondeur. Fonctionne avec les deux backends.
+- Diagnostic d'abord : ligne **« R16G16F effacée (M8.3) »** de l'onglet. Si elle affiche « = RT4 », la cible
+  qu'utilise Luma est bien notre RT4. Log : `cible R16G16_FLOAT effacée : WxH, …` (la première ligne peut
+  dire « autre que RT4 » avant la première détection de RT4 : se fier à l'onglet).
+- Réglage de l'échelle, caméra en rotation lente devant des grilles/toits, à l'arrêt du personnage :
+  1. `UV`, Y normal (lecture de M5) ; 2. `[-1,1]` (lecture de Luma) ; 3. chacun avec « Y inversé ».
+  Bon réglage : pas de dédoublement ni de traînée sur Batman en mouvement ; une mauvaise échelle donne des
+  objets qui « fondent » ou laissent une traînée dans le mauvais sens.
+- **Attendu probable** : d'après M5, RT4 est nulle sur le décor statique (seuls les objets mobiles écrivent
+  leur vélocité). Si c'est le cas, l'image traîne dès que la caméra tourne : le critère du plan n'est pas
+  rempli et on garde la reprojection (option coupée). Le noter dans le retour.
+- Log : aucune ligne propre ; `contexte FSR créé …` réapparaît quand on coche/décoche (contexte recréé).
