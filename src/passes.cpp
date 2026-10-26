@@ -33,12 +33,13 @@ struct ps_state {
   uint64_t srv1 = 0;
 } g_ps;
 
-// M8.1 : désarmé après un échec, jusqu'au prochain changement de l'option.
+// M8.1 : option (copie atomique des réglages) ; désarmé après un échec, jusqu'au prochain changement.
+std::atomic<bool> g_smaa_option{false};
 std::atomic<bool> g_smaa_disarmed{false};
 
 bool smaa_insertion_armed() {
-  return !g_smaa_disarmed.load(std::memory_order_relaxed) && insertion::fsr_active() &&
-         insertion::get_fsr_settings().smaa_insertion;
+  return g_smaa_option.load(std::memory_order_relaxed) && !g_smaa_disarmed.load(std::memory_order_relaxed) &&
+         insertion::fsr_active();
 }
 
 struct frame_flags {
@@ -86,11 +87,13 @@ void update_status(pass_status &s, bool found_now, const char *name) {
 void on_bind_pipeline(command_list *cmd, pipeline_stage stages, pipeline p) {
   if (!is_immediate(cmd)) return;
   if ((stages & pipeline_stage::compute_shader) != 0) g_cs.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
-  if ((stages & pipeline_stage::pixel_shader) != 0) g_ps.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
+  if ((stages & pipeline_stage::pixel_shader) != 0 && g_smaa_option.load(std::memory_order_relaxed))
+    g_ps.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
 }
 
 // M8.1 : SMAAEdgeDetection et SMAABlendingWeightCalculation sont sautées quand FSR remplace le SMAA.
 bool skip_smaa_draw() {
+  if (!g_smaa_option.load(std::memory_order_relaxed)) return false;
   if (g_ps.hash != kSmaaEdgePs && g_ps.hash != kSmaaWeightsPs) return false;
   if (g_ps.hash == kSmaaEdgePs) g_current.edge_depth = g_ps.srv1;
   if (!smaa_insertion_armed()) return false;
@@ -106,7 +109,7 @@ bool on_draw_indexed(command_list *cmd, uint32_t, uint32_t, uint32_t, int32_t, u
 void on_push_descriptors(command_list *cmd, shader_stage stages, pipeline_layout, uint32_t,
                          const descriptor_table_update &update) {
   if (!is_immediate(cmd)) return;
-  if ((stages & shader_stage::pixel) != 0 && update.type == descriptor_type::shader_resource_view &&
+  if ((stages & shader_stage::pixel) != 0 && g_smaa_option.load(std::memory_order_relaxed) && update.type == descriptor_type::shader_resource_view &&
       update.binding <= 1 && update.binding + update.count > 1)
     g_ps.srv1 = static_cast<const resource_view *>(update.descriptors)[1 - update.binding].handle;
   if ((stages & shader_stage::compute) == 0) return;
@@ -342,7 +345,7 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
     using st = frame_report::smaa_state;
     if (g_current.fsr_done) ++g_report.smaa_fsr_frames;
     g_report.smaa_insertion = g_smaa_disarmed.load()                        ? st::disarmed
-                              : !insertion::get_fsr_settings().smaa_insertion ? st::off
+                              : !g_smaa_option.load()                         ? st::off
                               : g_current.fsr_done                            ? st::active
                                                                               : st::fallback;
     update_status(g_report.velocity, g_current.velocity, "vélocité (0xF98BC308)");
@@ -362,7 +365,9 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
 }  // namespace
 
 void set_shader_patches_enabled(bool enabled) { g_patches_enabled = enabled; }
-void rearm_smaa_insertion() { g_smaa_disarmed = false; }
+void set_smaa_insertion(bool enabled) {
+  if (enabled != g_smaa_option.exchange(enabled)) g_smaa_disarmed = false;
+}
 bool shader_patches_enabled() { return g_patches_enabled.load(); }
 
 frame_report get_report() {

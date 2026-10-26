@@ -83,6 +83,7 @@ void load_settings() {
     std::lock_guard lock(g_settings_mutex);
     g_fsr_settings = s;
   }
+  passes::set_smaa_insertion(s.smaa_insertion);
   uint32_t key = 0;
   reshade::get_config_value(nullptr, kSection, "ToggleKey", key);
   g_toggle_key = key;
@@ -161,6 +162,7 @@ void set_fsr_settings(const fsr::settings &s) {
     std::lock_guard lock(g_settings_mutex);
     g_fsr_settings = s;
   }
+  passes::set_smaa_insertion(s.smaa_insertion);
   save_settings();
 }
 

@@ -54,7 +54,7 @@ frame_report get_report();
 void set_shader_patches_enabled(bool enabled);
 bool shader_patches_enabled();
 
-// M8.1 : réarme l'insertion au SMAA après un échec (appelé quand l'option change).
-void rearm_smaa_insertion();
+// M8.1 : option d'insertion au SMAA (suivi des pixel shaders seulement si active) ; réarme après un échec.
+void set_smaa_insertion(bool enabled);
 
 }  // namespace akfsr::passes
