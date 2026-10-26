@@ -251,9 +251,10 @@ Ce sont des **faits d'interopérabilité** ; l'implémentation d'AK-FSR doit êt
   - OptiScaler en `version.dll` avec les DLL du pilote AMD dans le dossier : crash en sortie de vidéo,
     puis jeu bloqué au démarrage.
   - ReShade 6.8.0 en `dxgi.dll` + OptiScaler en `wininet.dll` : blocage intermittent avant la swapchain.
-  - **À tester** : OptiScaler en `dxgi.dll` chargeant ReShade lui-même (`ReShade64.dll`,
-    `[Plugins] LoadReshade=true`), génération d'images d'OptiScaler entièrement désactivée
-    (sinon il enveloppe la swapchain avec XeFG, ce qui gêne RenoDX).
+  - OptiScaler en `dxgi.dll` chargeant ReShade lui-même (`ReShade64.dll`, `[Plugins] LoadReshade=true`),
+    génération d'images désactivée : violation d'accès dans `amdxc64.dll` juste après l'interop.
+    Avec `[FSR] Fsr4DoNotLoadAmdxc64=true` : plus de crash, mais FSR 4 n'est plus proposé
+    (seules 3.1.4 et 2.3.3 listées). Aucune configuration à la fois stable et avec FSR 4 → M10.
 - L'addon retombe sur la version FSR par défaut si la version sauvegardée n'est plus disponible.
 - Une réécriture en plugin `.asi` d'OptiScaler (appels DLSS/NGX vers OptiScaler) a été étudiée :
   écartée, car elle impose de quitter ReShade, donc de perdre RenoDX et le HDR.
