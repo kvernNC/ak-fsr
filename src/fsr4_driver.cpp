@@ -224,6 +224,8 @@ bool load() {
   if (FAILED(hr) || data.create_context == nullptr || data.dispatch == nullptr || data.destroy_context == nullptr)
     return fail(signed_loaded < 2 ? "le pilote n'a pas donné de provider (DLL signées du SDK manquantes ?)"
                                   : "le pilote n'a pas donné de provider");
+  if (data.can_provide != nullptr && !data.can_provide(FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE))
+    return fail("le provider du pilote refuse la création d'upscaler (can_provide)");
   if (data.version_id != kDriverVersionId) {
     std::snprintf(buf, sizeof(buf), "identifiant inattendu 0x%016llx (attendu 0x%016llx) : version du pilote non prise "
                   "en charge", static_cast<unsigned long long>(data.version_id),
