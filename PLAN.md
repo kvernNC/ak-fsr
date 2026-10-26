@@ -30,7 +30,7 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M7 : finitions | à faire | — |
 | M8 : optimisations Deck inspirées de Luma | à faire | à faire |
 | M9 : upscaling (rendu < natif) | exploratoire | — |
-| M10 : FSR 4 | exploratoire (PC) | déconseillé (coût INT8) |
+| M10 : choix FSR 2 / 3 / 4 (fsr4-vk, sans OptiScaler) | à faire | à faire (coût à mesurer) |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
 budget visé de 2 ms. Détail du coût (préparation / FSR / copies / flush DXVK) : à relever sur Deck.
@@ -162,10 +162,40 @@ Ne pas passer au suivant sans validation.
   `ScreenPercentage=80` (et `UpscaleScreenPercentage=True`) dans `BmSystemSettings.ini` : 3D plus douce,
   UI nette, fps en hausse. Si oui, faire rendre FSR de la résolution réduite vers la native à la place
   de l'agrandissement du moteur.
-- **M10 — FSR 4 (exploratoire, PC)** : via OptiScaler chargé dans le processus (voir §8).
-  Déconseillé sur Deck (modèle INT8 sur RDNA2, coût élevé) tant que M8 n'a pas libéré de budget.
+- **M10 — Choix FSR 2 / FSR 3 / FSR 4 sans OptiScaler** (voir §8) :
+  1. Menu « Version FSR » : lister les versions de **tous** les fournisseurs chargés, avec la DLL
+     d'origine : `amd_fidelityfx_vk.dll` (FSR 2.3.3, FSR 3.1.4) et, si présente,
+     `amd_fidelityfx_upscaler_vk.dll` de fsr4-vk (« 4.1.1 Vulkan Auto / INT8 / FP8 »).
+     Même API FFX (`ffxCreateContext` / `ffxDispatch` / `ffxQuery`), version imposée via
+     `ffxOverrideVersion` à la création du contexte.
+  2. Libellés : « FSR 4 » = FP8 (RDNA 4 uniquement, PC) ; « FSR 4 Lite » = INT8 (RDNA 2/3/4, Deck).
+     Masquer FP8 si le GPU ne le gère pas ; « Auto » laisse fsr4-vk choisir.
+  3. Vérifier au chargement que le `VkDevice` de DXVK expose ce que fsr4-vk exige
+     (`VK_EXT_descriptor_buffer`, buffer device address, synchronization2) ; sinon griser FSR 4
+     et l'indiquer dans l'onglet.
+  4. Repli sur FSR 3.1 si la création du contexte FSR 4 échoue (déjà le cas pour une version absente).
+  Critère : bascule FSR 2 / 3 / 4 Lite / 4 en jeu sans crash ; coût mesuré pour chacune sur Deck et PC.
+  FSR 4 Lite sur Deck : à n'adopter que si le coût tient dans le budget du §6.
 
 ## 8. FSR 4 et OptiScaler (notes)
+
+### 8.1 Voie retenue : fsr4-vk, sans OptiScaler
+
+- AMD ne fournit FSR 4 qu'en DX12 (`amd_fidelityfx_upscaler_dx12.dll`) ; le dépôt du SDK 2.3.0 indique
+  « Vulkan is currently not supported ». OptiScaler l'obtient en Vulkan via un pont vers DX12 (vkd3d).
+- [fsr4-vk](https://github.com/Astyyyyy/fsr4-vk) (Astyyyyy) : implémentation Vulkan indépendante de
+  FSR 4.1.1, **FP8 et INT8**, à partir des modèles et shaders extraits de la DLL DX12 officielle du
+  FidelityFX SDK 2.3.0 (version 4.1.1.2740, empreinte vérifiée par ses outils). Produit
+  `amd_fidelityfx_upscaler_vk.dll`, qui exporte l'**API FFX standard** et annonce les versions
+  « 4.1.1 Vulkan Auto », « 4.1.1 Vulkan INT8 », « 4.1.1 Vulkan FP8 ». Compilation croisée Windows depuis
+  Linux prévue (MinGW-w64 : ajouter `mingw-w64-gcc` à l'image si besoin).
+- Exige sur le device : `VK_EXT_descriptor_buffer` (`vkGetDescriptorEXT`, …), buffer device address,
+  synchronization2. À vérifier sur le device de DXVK (PC et Deck).
+- Projet très jeune (premiers commits fin octobre 2026), licence **GPL-3.0-only** : ne pas l'inclure dans
+  le dépôt ni dans les binaires d'AK-FSR ; chaque utilisateur le compile lui-même (il a besoin de la DLL
+  AMD de toute façon). AK-FSR se contente de le charger s'il est présent.
+
+### 8.2 Essais avec OptiScaler (historique)
 
 - FSR 4 est disponible sans code supplémentaire (constaté le 26/10/2026 sur PC) avec **OptiScaler
   nightly** chargé dans le processus : le chargeur de `amd_fidelityfx_vk.dll` (SDK v1.1.4) liste alors
@@ -225,6 +255,7 @@ Ne pas passer au suivant sans validation.
 Projet personnel. On étudie et réimplémente des **méthodes** (passes, buffers, logique) :
 
 - Mod DLAA (Zorkanne33) : aucun code ni binaire repris ou distribué.
+- fsr4-vk (Astyyyyy, GPL-3.0-only) : chargé dynamiquement s'il est présent, jamais redistribué avec AK-FSR.
 - Luma Framework (Filippo Tarpini et contributeurs) : idées reprises (§4.2). Tout code repris doit être
   signalé en commentaire et crédité dans le README, conformément à sa licence.
 - Ne pas redistribuer de binaire du mod DLAA ni de RenoDX patché sans l'accord de leurs auteurs.
