@@ -5,6 +5,7 @@
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -12,6 +13,7 @@
 #include <reshade.hpp>
 
 #include "detour.hpp"
+#include "x64_decode.hpp"
 
 namespace akfsr::vk_device_hook {
 namespace {
@@ -178,6 +180,43 @@ VKAPI_ATTR VkResult VKAPI_CALL hooked_create_device(VkPhysicalDevice physical, c
 
 }  // namespace
 
+void log_prologue() {
+  HMODULE vk = GetModuleHandleW(L"winevulkan.dll");
+  const char *module = "winevulkan.dll";
+  if (vk == nullptr) {
+    vk = GetModuleHandleW(L"vulkan-1.dll");
+    module = "vulkan-1.dll";
+  }
+  auto *code = vk != nullptr ? reinterpret_cast<const uint8_t *>(GetProcAddress(vk, "vkCreateDevice")) : nullptr;
+  if (code == nullptr) {
+    reshade::log::message(reshade::log::level::info,
+                          "AK-FSR: diagnostic : vkCreateDevice introuvable (winevulkan/vulkan-1 pas encore chargé)");
+    return;
+  }
+  // Même suivi des sauts de forwarding que detour::install.
+  for (int i = 0; i < 4; ++i) {
+    int32_t rel;
+    if (code[0] == 0xFF && code[1] == 0x25) {
+      std::memcpy(&rel, code + 2, 4);
+      code = *reinterpret_cast<const uint8_t *const *>(code + 6 + rel);
+    } else if (code[0] == 0xE9) {
+      std::memcpy(&rel, code + 1, 4);
+      code = code + 5 + rel;
+    } else {
+      break;
+    }
+  }
+  size_t stolen = 0, len = 1;
+  while (stolen < 14 && (len = x64::instruction_length(code + stolen)) != 0) stolen += len;
+  char buf[256];
+  int pos = std::snprintf(buf, sizeof(buf), "AK-FSR: diagnostic : vkCreateDevice de %s :", module);
+  for (int i = 0; i < 24 && pos < static_cast<int>(sizeof(buf)) - 4; ++i)
+    pos += std::snprintf(buf + pos, sizeof(buf) - pos, " %02X", code[i]);
+  std::snprintf(buf + pos, sizeof(buf) - pos, " -> détour %s (%zu octets)", stolen >= 14 ? "possible" : "REFUSÉ",
+                stolen);
+  reshade::log::message(reshade::log::level::info, buf);
+}
+
 bool install() {
   {
     std::lock_guard lock(g_mutex);
@@ -185,7 +224,6 @@ bool install() {
   }
   HMODULE vk = GetModuleHandleW(L"winevulkan.dll");
   if (vk == nullptr) vk = GetModuleHandleW(L"vulkan-1.dll");
-  if (vk == nullptr) vk = LoadLibraryW(L"vulkan-1.dll");
   void *create = vk != nullptr ? reinterpret_cast<void *>(GetProcAddress(vk, "vkCreateDevice")) : nullptr;
   g_enum_extensions = vk != nullptr ? reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(
                                           GetProcAddress(vk, "vkEnumerateDeviceExtensionProperties"))

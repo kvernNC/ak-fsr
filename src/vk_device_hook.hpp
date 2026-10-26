@@ -12,6 +12,9 @@ namespace akfsr::vk_device_hook {
 
 bool install();  // à appeler depuis DllMain, si l'option Fsr4Driver est active
 
+// Diagnostic sans effet (toujours au chargement) : prologue de vkCreateDevice et décision du décodeur.
+void log_prologue();
+
 struct status {
   bool installed = false;
   bool device_seen = false;

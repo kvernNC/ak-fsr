@@ -50,9 +50,33 @@ std::filesystem::path module_dir(HMODULE module) {
   return std::filesystem::path(path).parent_path();
 }
 
+std::filesystem::path g_addon_dir;
+
+// Diagnostic au chargement (sans effet) : fichiers attendus par les options et prologue de vkCreateDevice.
+void log_environment(const std::filesystem::path &dir) {
+  std::error_code ec;
+  auto present = [&](const std::filesystem::path &p) { return std::filesystem::exists(p, ec) ? "oui" : "non"; };
+  log_fmt(reshade::log::level::info,
+          "AK-FSR: diagnostic : amd_fidelityfx_vk.dll %s, ak-fsr-dx11.dll %s, d3dcompiler_47 %s",
+          present(dir / "amd_fidelityfx_vk.dll"), present(dir / "ak-fsr-dx11.dll"),
+          LoadLibraryW(L"d3dcompiler_47.dll") != nullptr ? "oui" : "non");
+  const auto amd = dir / "ak-fsr";
+  log_fmt(reshade::log::level::info,
+          "AK-FSR: diagnostic : ak-fsr\\ amdvkffx64.dll %s, amd_fidelityfx_loader_vk.dll %s, "
+          "amd_fidelityfx_upscaler_vk.dll %s",
+          present(amd / "amdvkffx64.dll"), present(amd / "amd_fidelityfx_loader_vk.dll"),
+          present(amd / "amd_fidelityfx_upscaler_vk.dll"));
+  akfsr::vk_device_hook::log_prologue();
+}
+
 void on_init_swapchain(reshade::api::swapchain *swapchain, bool resize) {
   const auto desc = swapchain->get_device()->get_resource_desc(swapchain->get_current_back_buffer());
   g_swapchain = {desc.texture.width, desc.texture.height, desc.texture.format, true};
+  static bool environment_logged = false;  // hors de DllMain : LoadLibrary interdit sous le verrou du loader
+  if (!environment_logged) {
+    environment_logged = true;
+    log_environment(g_addon_dir);
+  }
   log_fmt(reshade::log::level::info, "AK-FSR: swapchain %ux%u format=%u resize=%d",
           desc.texture.width, desc.texture.height, static_cast<uint32_t>(desc.texture.format), resize ? 1 : 0);
 }
@@ -189,8 +213,6 @@ std::string build_report() {
   add("[frame] %u draws, %u dispatches, %zu shaders suivis", ds.draws, ds.dispatches, ds.shaders_known);
   return out;
 }
-
-std::filesystem::path g_addon_dir;
 
 void on_overlay(reshade::api::effect_runtime *) {
   ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " (" AKFSR_MILESTONE " : FSR AA natif)");

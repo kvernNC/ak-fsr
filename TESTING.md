@@ -13,6 +13,11 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - Log attendu, comme en 0.6.3 : `addon loaded (v0.7.0, …)`, `interop Vulkan prête…`,
   `contexte FSR créé : …, version 3.1.4`, `passe insertion (0xB2A276FD) trouvée`.
 - Noter les fps et les temps GPU de l'onglet (préparation / FSR) : ce sont les valeurs de comparaison.
+- Nouvelles lignes de diagnostic (sans effet, à la création de la swapchain) — **me les transmettre** :
+  `diagnostic : amd_fidelityfx_vk.dll oui, ak-fsr-dx11.dll …, d3dcompiler_47 …`,
+  `diagnostic : ak-fsr\ amdvkffx64.dll …`, et surtout
+  `diagnostic : vkCreateDevice de winevulkan.dll : XX XX … -> détour possible|REFUSÉ (N octets)` : dit à
+  l'avance si le détour de M10.2 pourra s'installer, sans activer l'option.
 
 ## 1. M7.1 — Touche on/off
 
