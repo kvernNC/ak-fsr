@@ -1,0 +1,7 @@
+build/
+ReShade.log
+ak-fsr-dumps/
+deck/
+steam-*.log
+third_party/ffx-api/bin/
+re/

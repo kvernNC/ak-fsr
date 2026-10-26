@@ -1,0 +1,26 @@
+#include "version.h"
+
+1 VERSIONINFO
+FILEVERSION AKFSR_VERSION_MAJOR, AKFSR_VERSION_MINOR, AKFSR_VERSION_PATCH, 0
+PRODUCTVERSION AKFSR_VERSION_MAJOR, AKFSR_VERSION_MINOR, AKFSR_VERSION_PATCH, 0
+FILEOS 0x40004
+FILETYPE 0x2
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "AK-FSR"
+      VALUE "FileDescription", "AA temporel FSR pour Batman: Arkham Knight"
+      VALUE "FileVersion", AKFSR_VERSION
+      VALUE "InternalName", "ak-fsr"
+      VALUE "OriginalFilename", "ak-fsr.addon64"
+      VALUE "ProductName", "AK-FSR"
+      VALUE "ProductVersion", AKFSR_VERSION
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

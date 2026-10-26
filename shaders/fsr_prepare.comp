@@ -1,0 +1,52 @@
+#version 450
+// Prépare les entrées de FSR à partir de la profondeur du jeu (D32_SFLOAT_S8_UINT, aspect profondeur) :
+//  - profondeur R32F (format attendu par FSR) ;
+//  - vecteurs de mouvement (UV précédente - UV courante) :
+//      * objets qui écrivent la vélocité du G-buffer (RT4) : RT4 + (jitter courant - jitter précédent) en UV,
+//        car le jeu la calcule avec les ViewProj jitterées ;
+//      * ailleurs (RT4 nulle) : caméra seule, par reprojection avec
+//        reproj = ViewProj(précédente) * inverse(ViewProj(courante)), sans jitter, en vecteur-colonne.
+// Profondeur standard (0 proche, 1 infini), NDC D3D (y vers le haut, v vers le bas).
+#extension GL_EXT_samplerless_texture_functions : require
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0) uniform texture2D depth_src;
+layout(binding = 1, r32f) uniform writeonly image2D out_depth;
+layout(binding = 2, rg16f) uniform writeonly image2D out_motion;
+layout(binding = 3) uniform texture2D object_velocity;  // RT4 du G-buffer (r16g16_float)
+
+layout(push_constant) uniform constants {
+  mat4 reproj;
+  vec2 size;
+  vec2 inv_size;
+  vec2 jitter_delta_uv;  // jitter courant - jitter précédent, en UV
+  uint zero_motion;
+  uint use_objects;
+} pc;
+
+void main() {
+  const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+  if (any(greaterThanEqual(p, ivec2(pc.size)))) return;
+
+  const float depth = texelFetch(depth_src, p, 0).r;
+  imageStore(out_depth, p, vec4(depth, 0.0, 0.0, 0.0));
+
+  vec2 motion = vec2(0.0);
+  if (pc.zero_motion == 0u) {
+    const vec2 object = pc.use_objects != 0u ? texelFetch(object_velocity, p, 0).rg : vec2(0.0);
+    if (object != vec2(0.0)) {
+      motion = object + pc.jitter_delta_uv;
+    } else {
+      const vec2 uv = (vec2(p) + 0.5) * pc.inv_size;
+      const vec4 clip = vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, depth, 1.0);
+      const vec4 prev = pc.reproj * clip;
+      if (abs(prev.w) > 1e-8) {
+        const vec2 prev_ndc = prev.xy / prev.w;
+        const vec2 prev_uv = vec2(prev_ndc.x * 0.5 + 0.5, 0.5 - prev_ndc.y * 0.5);
+        motion = prev_uv - uv;
+      }
+    }
+  }
+  imageStore(out_motion, p, vec4(motion, 0.0, 0.0));
+}
