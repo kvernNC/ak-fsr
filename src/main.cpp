@@ -145,7 +145,8 @@ void on_overlay(reshade::api::effect_runtime *) {
     akfsr::insertion::set_mode(choice == 0 ? akfsr::insertion::mode::off : akfsr::insertion::mode::fsr);
     if (choice != 0) {
       s.version_id = choice == 2 ? akfsr::fsr4::kDriverVersionId : 0;
-      if (choice == 2) s.fsr_backend = akfsr::fsr::backend::vulkan;  // FSR 4 : chemin Vulkan
+      // FSR 4 : chemin Vulkan obligatoire ; FSR 3.1 : backend par défaut (DX11, plus rapide, repli Vulkan).
+      s.fsr_backend = choice == 2 ? akfsr::fsr::backend::vulkan : static_cast<akfsr::fsr::backend>(akfsr::fsr::kDefaultBackend);
       akfsr::insertion::set_fsr_settings(s);
     }
   }

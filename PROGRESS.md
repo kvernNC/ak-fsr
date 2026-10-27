@@ -154,6 +154,26 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
 - Prologue de `vkCreateDevice` de winevulkan reconnu par le décodeur (sinon la ligne de log donne les octets).
 - `radv_cooperative_matrix2_nv=true` doit être dans la ligne de lancement (lu par RADV avant l'addon).
 
+## Steam Deck (27/10/2026, OLED, 1280×800, ReShade 6.8.0 + RenoDX, sans OptiScaler)
+
+Batman sur son toit de départ, AA du jeu « On », biais de LOD -1, pilotage par fichier via `sshfs` :
+
+| Configuration | fps | ms par frame | Surcoût | GPU de FSR |
+|---|---|---|---|---|
+| AK-FSR coupé (SMAA du jeu) | 64,8 | 15,4 | — | — |
+| **FSR 3.1 DX11 à la place du SMAA (M8.1 + M8.2)** | **57,2** | **17,5** | **+2,1 ms** | 3,7–4,0 ms |
+| FSR 3.1 Vulkan après le SMAA (chemin v0.6.3) | 47,6 | 21,0 | +5,6 ms | 6,5 ms |
+| FSR 4 (pilote) après le SMAA | 47,3 | 21,1 | +5,7 ms | 6,8 ms |
+
+- M8.1 + M8.2 atteint presque le budget de 2 ms : backend DX11 désormais par défaut de la version publiée pour
+  FSR 3.1 (repli Vulkan sans `ak-fsr-dx11.dll`).
+- FSR 4 : provider fourni par le pilote sur Van Gogh (sans FP8 ni matrices coopératives : 5 extensions ajoutées),
+  modèle **INT8 identique à celui imposé sur PC** (11 shaders, empreinte `0x1BCF1FEB`) : pas de Lite distinct
+  observé. Coût équivalent à FSR 3.1 Vulkan (chemin Vulkan obligatoire).
+- Images correctes dans les quatre modes (captures PNG).
+- `sshfs` : le cache masque la suppression du fichier de commandes ; envoyer avec pauses fixes et `ls` du dossier
+  avant chaque écriture.
+
 ## État au soir du 27/10/2026
 
 - Branches : `dev` (outils, défaut ON) et `main` (version publiée, défaut OFF) ; travail sur `dev`, fusion dans `main`.

@@ -17,6 +17,9 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
          std::string &error);
 void shutdown();
 
+// ak-fsr-dx11.dll présente et valide (chargée au premier appel).
+bool available();
+
 // Durées GPU mesurées par requêtes timestamp D3D11 (résultats lus avec quelques frames de retard).
 struct gpu_timings {
   double prepare_ms = 0, fsr_ms = 0, copy_ms = 0;  // préparation, FSR, copie du résultat

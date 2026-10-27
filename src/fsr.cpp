@@ -645,7 +645,8 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   }
 
   frame_params p;
-  if (s.fsr_backend == backend::dx11) {
+  // Backend DX11 sans ak-fsr-dx11.dll (défaut de la version publiée) : repli sur le chemin Vulkan.
+  if (s.fsr_backend == backend::dx11 && dx11::available()) {
     compute_params(in, s, desc.Width, desc.Height, p);
     std::string error;
     const double t0 = now_ms();
