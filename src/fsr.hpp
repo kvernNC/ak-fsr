@@ -14,6 +14,16 @@ struct ID3D11Resource;
 
 namespace akfsr::fsr {
 
+// Défauts : version de développement = nouveautés coupées (tests un par un) ; version publiée = réglages validés
+// en jeu (PROGRESS.md) : SMAA du jeu remplacé quand il est actif, biais de LOD -1.
+#if AKFSR_DEV_TOOLS
+inline constexpr bool kDefaultSmaaInsertion = false;
+inline constexpr float kDefaultLodBias = 0.0f;
+#else
+inline constexpr bool kDefaultSmaaInsertion = true;
+inline constexpr float kDefaultLodBias = -1.0f;
+#endif
+
 // Début du CB View copié à chaque frame : c0..c21 (ViewProj courante et précédente, …, c21 = origine du
 // repère translaté).
 inline constexpr size_t kViewFloats = 88;
@@ -33,13 +43,13 @@ struct settings {
   bool object_velocity = true;  // vélocité des objets du G-buffer (RT4, M5)
   bool highlights = false;        // M7 : hautes lumières sorties de FSR puis rajoutées
   float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
-  bool smaa_insertion = false;    // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
+  bool smaa_insertion = kDefaultSmaaInsertion;  // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
   backend fsr_backend = backend::vulkan;  // M8.2
   // M8.3 : vélocité du G-buffer (RT4) passée telle quelle à FSR, sans reprojection (jitter annulé par FSR).
   bool game_mv = false;
   int game_mv_scale = 0;     // 0 : UV (× taille, lecture de M5) ; 1 : [-1, 1] (× taille / 2, lecture de Luma)
   bool game_mv_flip_y = false;
-  float lod_bias = 0.0f;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
+  float lod_bias = kDefaultLodBias;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
   // M10.2 : FSR 4 par le provider du pilote AMD (DLL dans ak-fsr/, détour de vkCreateDevice au lancement).
   bool fsr4_driver = false;
   // M8.5 : exposition du jeu (texture 1×1 du tonemapper) à la place de l'auto-exposition de FSR.

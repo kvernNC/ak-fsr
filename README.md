@@ -40,9 +40,16 @@ vecteurs de mouvement, insertion avant le post-traitement), réimplémentée de 
 4. En jeu, ouvrir l'overlay ReShade → onglet **AK-FSR** (mode FSR actif par défaut).
 5. Désactiver les effets d'AA de ReShade (SMAA, FXAA) : ils s'appliqueraient après FSR, sur l'interface.
 
-### Options (toutes désactivées par défaut)
+### Onglet AK-FSR
 
-Onglet **AK-FSR** ou section `[AK-FSR]` de `ReShade.ini`. Détails et procédure de test : [TESTING.md](TESTING.md).
+Version publiée (branche `main`) : un seul choix, **Off / FSR 3.1 / FSR 4**, et le modèle FSR 4 utilisé (choisi
+par le pilote selon le GPU). Le reste suit les réglages validés en jeu : SMAA du jeu remplacé par FSR quand l'AA
+du jeu est actif (sinon insertion habituelle), biais de LOD -1, FSR 4 proposé dès que les DLL AMD sont en place.
+Les clés de `ReShade.ini` ci-dessous restent lues pour qui veut s'en écarter.
+
+### Options (clés de `[AK-FSR]`, toutes visibles dans l'onglet de la version de développement)
+
+Détails et procédure de test : [TESTING.md](TESTING.md).
 
 | Option | Clé | État (PC, 27/10/2026) |
 |---|---|---|
@@ -55,11 +62,12 @@ Onglet **AK-FSR** ou section `[AK-FSR]` de `ReShade.ini`. Détails et procédure
 | Exposition du jeu | `GameExposure=1` | fonctionne ; intérêt qualité à juger |
 | FSR 4 par le provider du pilote AMD | `Fsr4Driver=1` + menu « Version FSR » | validée (FP8, RX 9070 XT) |
 
-Réglages conseillés sur PC : `SmaaInsertion=1` (AA du jeu sur « On »), `LodBias=-1.0`, et FSR 4 si le GPU le
-permet (voir ci-dessous). Le Deck n'a pas encore été testé avec ces options.
+Réglages conseillés sur PC (défauts de la version publiée) : `SmaaInsertion=1` (AA du jeu sur « On »),
+`LodBias=-1.0`, et FSR 4 si le GPU le permet (voir ci-dessous). Le Deck n'a pas encore été testé avec ces options.
 
-Pilotage sans clavier (prise en main à distance) : fichier `ak-fsr-command.txt` à côté de l'addon (`report`,
-`profile <n>`, `toggle`, `screenshot <nom> [n]`, `look`, `capture`…), voir TESTING.md.
+Version de développement seulement : pilotage sans clavier par `ak-fsr-command.txt` à côté de l'addon (`report`,
+`profile <n>`, `toggle`, `screenshot <nom> [n]`, `look`, `capture`…), rapport, profils de test, explorateur de
+shaders, compteurs ; voir TESTING.md.
 
 ### OptiScaler : à éviter
 
@@ -81,6 +89,14 @@ FSR 4.1.2 est obtenu directement du provider du pilote AMD, sans OptiScaler :
 
 Mesures sur RX 9070 XT (800×600) : FSR 4 est moins crénelé et scintille moins que FSR 3.1, pour un coût GPU de
 0,26 ms contre 0,17 ms.
+
+## Branches
+
+- `main` : version publiée, compilée sans les outils de développement (`AKFSR_DEV_TOOLS=OFF` par défaut).
+- `dev` : développement et tests, mêmes sources compilées avec les outils (`AKFSR_DEV_TOOLS=ON` par défaut).
+
+Les deux branches ne diffèrent que par cette valeur par défaut : le travail se fait sur `dev`, puis `dev` est
+fusionnée dans `main`. Chacune peut produire l'autre variante avec `-DAKFSR_DEV_TOOLS=ON|OFF`.
 
 ## Compilation (depuis Linux)
 

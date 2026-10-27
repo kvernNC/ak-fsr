@@ -1,0 +1,4 @@
+/workspace/build-release/CMakeFiles/ak-fsr.dir
+/workspace/build-release/CMakeFiles/ak-fsr-dx11.dir
+/workspace/build-release/CMakeFiles/edit_cache.dir
+/workspace/build-release/CMakeFiles/rebuild_cache.dir

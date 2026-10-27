@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")  # CRT statique : pas de dépendance aux DLL VC++ dans le préfixe
 
+# Outils de développement (profils, rapport, pilotage par fichier, captures, compteurs) : ON sur la branche dev,
+# OFF sur main (version publiée).
+option(AKFSR_DEV_TOOLS "Compiler les outils de développement" ON)
+
 add_library(ak-fsr SHARED
   src/main.cpp
   src/frame_dump.cpp
@@ -19,7 +23,6 @@ add_library(ak-fsr SHARED
   src/gpu_timer.cpp
   src/shader_explorer.cpp
   src/exposure.cpp
-  src/screenshot.cpp
   src/highlights.cpp
   src/fsr_dx11.cpp
   src/lod_bias.cpp
@@ -34,7 +37,11 @@ target_include_directories(ak-fsr PRIVATE
   third_party/Vulkan-Headers/include
   third_party/ffx-api/include
   src)
-target_compile_definitions(ak-fsr PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_definitions(ak-fsr PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN AKFSR_DEV_TOOLS=$<BOOL:${AKFSR_DEV_TOOLS}>)
+if(AKFSR_DEV_TOOLS)
+  target_sources(ak-fsr PRIVATE src/dev_tools.cpp src/screenshot.cpp)
+endif()
+message(STATUS "AK-FSR : outils de développement ${AKFSR_DEV_TOOLS}")
 set_target_properties(ak-fsr PROPERTIES PREFIX "" SUFFIX ".addon64")
 
 # amd_fidelityfx_vk.dll (scripts/fetch_ffx.sh) doit être déployée à côté de l'addon.

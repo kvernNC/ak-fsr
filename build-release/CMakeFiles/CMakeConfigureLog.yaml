@@ -1,0 +1,901 @@
+
+---
+events:
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineSystem.cmake:12 (find_program)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_UNAME"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "uname"
+    candidate_directories:
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/sbin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    searched_directories:
+      - "/usr/local/sbin/uname"
+      - "/usr/local/bin/uname"
+    found: "/usr/sbin/uname"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineSystem.cmake:213 (message)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      The target system is: Windows -  - AMD64
+      The host system is: Linux - 7.3.0-3-cachyos - x86_64
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeNinjaFindMake.cmake:5 (find_program)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_MAKE_PROGRAM"
+    description: "Program used to build from build.ninja files."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "ninja-build"
+      - "ninja"
+      - "samu"
+    candidate_directories:
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/sbin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    searched_directories:
+      - "/usr/local/sbin/ninja-build"
+      - "/usr/local/sbin/ninja"
+      - "/usr/local/sbin/samu"
+      - "/usr/local/bin/ninja-build"
+      - "/usr/local/bin/ninja"
+      - "/usr/local/bin/samu"
+      - "/usr/sbin/ninja-build"
+    found: "/usr/sbin/ninja"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompiler.cmake:115 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:71 (_cmake_find_compiler_path)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_CXX_COMPILER_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "clang-cl"
+    candidate_directories:
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/sbin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    searched_directories:
+      - "/usr/local/sbin/clang-cl"
+      - "/usr/local/bin/clang-cl"
+    found: "/usr/sbin/clang-cl"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:501 (find_file)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:538 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCXXCompilerId.cpp.in"
+    candidate_directories:
+      - "/usr/share/cmake/Modules/"
+    found: "/usr/share/cmake/Modules/CMakeCXXCompilerId.cpp.in"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler: /usr/sbin/clang-cl 
+      Build flags: /imsvc/home/dev/.xwin/crt/include;/imsvc/home/dev/.xwin/sdk/include/ucrt;/imsvc/home/dev/.xwin/sdk/include/um;/imsvc/home/dev/.xwin/sdk/include/shared;--target=x86_64-pc-windows-msvc;/EHsc
+      Id flags:  
+      
+      The output was:
+      1
+      clang-cl: warning: unable to find a Visual Studio installation; try running Clang from a developer command prompt [-Wmsvc-not-found]
+      clang-cl: error: unable to execute command: posix_spawn failed: No such file or directory
+      clang-cl: error: linker command failed with exit code 1 (use -v to see invocation)
+      
+      
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:501 (find_file)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:538 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCXXCompilerId.cpp.in"
+    candidate_directories:
+      - "/usr/share/cmake/Modules/"
+    found: "/usr/share/cmake/Modules/CMakeCXXCompilerId.cpp.in"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: /usr/sbin/clang-cl 
+      Build flags: /imsvc/home/dev/.xwin/crt/include;/imsvc/home/dev/.xwin/sdk/include/ucrt;/imsvc/home/dev/.xwin/sdk/include/um;/imsvc/home/dev/.xwin/sdk/include/shared;--target=x86_64-pc-windows-msvc;/EHsc
+      Id flags: -c 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.obj"
+      
+      The CXX compiler identification is Clang, found in:
+        /workspace/build-release/CMakeFiles/4.4.4/CompilerIdCXX/CMakeCXXCompilerId.obj
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:1379 (message)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:277 (CMAKE_DETERMINE_MSVC_SHOWINCLUDES_PREFIX)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Detecting CXX compiler /showIncludes prefix:
+        Note: including file: ./foo.h
+        
+      Found prefix "Note: including file: "
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:57 (__resolve_tool_path)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lld-link"
+    candidate_directories:
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    found: "/usr/sbin/lld-link"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:58 (__resolve_tool_path)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "llvm-mt"
+    candidate_directories:
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    found: "/usr/sbin/llvm-mt"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:64 (__resolve_tool_path)"
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:102 (__resolve_linker_path)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "link"
+    candidate_directories:
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    found: "/usr/sbin/link"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:64 (__resolve_tool_path)"
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:103 (__resolve_linker_path)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lld-link"
+    candidate_directories:
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    found: "/usr/sbin/lld-link"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_NM"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "llvm-nm"
+      - "nm"
+    candidate_directories:
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    found: "/usr/sbin/llvm-nm"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeFindBinUtils.cmake:247 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_AR"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "llvm-lib"
+      - "lib"
+    candidate_directories:
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+    found: "/usr/sbin/llvm-lib"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Compiler/Clang-FindBinUtils.cmake:26 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:207 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_CXX_COMPILER_AR"
+    description: "LLVM archiver"
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "llvm-ar-23.1"
+      - "llvm-ar-23"
+      - "llvm-ar23"
+      - "llvm-ar"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/sbin/"
+      - "/bin/"
+    searched_directories:
+      - "/usr/bin/llvm-ar-23.1"
+      - "/usr/sbin/llvm-ar-23.1"
+      - "/usr/local/sbin/llvm-ar-23.1"
+      - "/usr/local/bin/llvm-ar-23.1"
+      - "/sbin/llvm-ar-23.1"
+      - "/bin/llvm-ar-23.1"
+      - "/usr/bin/llvm-ar-23"
+      - "/usr/sbin/llvm-ar-23"
+      - "/usr/local/sbin/llvm-ar-23"
+      - "/usr/local/bin/llvm-ar-23"
+      - "/sbin/llvm-ar-23"
+      - "/bin/llvm-ar-23"
+      - "/usr/bin/llvm-ar23"
+      - "/usr/sbin/llvm-ar23"
+      - "/usr/local/sbin/llvm-ar23"
+      - "/usr/local/bin/llvm-ar23"
+      - "/sbin/llvm-ar23"
+      - "/bin/llvm-ar23"
+    found: "/usr/bin/llvm-ar"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Compiler/Clang-FindBinUtils.cmake:38 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:207 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_CXX_COMPILER_RANLIB"
+    description: "Generate index for LLVM archive"
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "llvm-ranlib-23.1"
+      - "llvm-ranlib-23"
+      - "llvm-ranlib23"
+      - "llvm-ranlib"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/sbin/"
+      - "/bin/"
+    searched_directories:
+      - "/usr/bin/llvm-ranlib-23.1"
+      - "/usr/sbin/llvm-ranlib-23.1"
+      - "/usr/local/sbin/llvm-ranlib-23.1"
+      - "/usr/local/bin/llvm-ranlib-23.1"
+      - "/sbin/llvm-ranlib-23.1"
+      - "/bin/llvm-ranlib-23.1"
+      - "/usr/bin/llvm-ranlib-23"
+      - "/usr/sbin/llvm-ranlib-23"
+      - "/usr/local/sbin/llvm-ranlib-23"
+      - "/usr/local/bin/llvm-ranlib-23"
+      - "/sbin/llvm-ranlib-23"
+      - "/bin/llvm-ranlib-23"
+      - "/usr/bin/llvm-ranlib23"
+      - "/usr/sbin/llvm-ranlib23"
+      - "/usr/local/sbin/llvm-ranlib23"
+      - "/usr/local/bin/llvm-ranlib23"
+      - "/sbin/llvm-ranlib23"
+      - "/bin/llvm-ranlib23"
+    found: "/usr/bin/llvm-ranlib"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Compiler/Clang-FindBinUtils.cmake:50 (find_program)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:207 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS"
+    description: "`clang-scan-deps` dependency scanner"
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "clang-scan-deps-23.1"
+      - "clang-scan-deps-23"
+      - "clang-scan-deps23"
+      - "clang-scan-deps"
+      - "clang-scan-deps-23.1"
+      - "clang-scan-deps-23"
+      - "clang-scan-deps23"
+      - "clang-scan-deps"
+    candidate_directories:
+      - "/usr/bin/"
+      - "/usr/sbin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/sbin/"
+      - "/bin/"
+    searched_directories:
+      - "/usr/bin/clang-scan-deps-23.1"
+      - "/usr/sbin/clang-scan-deps-23.1"
+      - "/usr/local/sbin/clang-scan-deps-23.1"
+      - "/usr/local/bin/clang-scan-deps-23.1"
+      - "/sbin/clang-scan-deps-23.1"
+      - "/bin/clang-scan-deps-23.1"
+      - "/usr/bin/clang-scan-deps-23"
+      - "/usr/sbin/clang-scan-deps-23"
+      - "/usr/local/sbin/clang-scan-deps-23"
+      - "/usr/local/bin/clang-scan-deps-23"
+      - "/sbin/clang-scan-deps-23"
+      - "/bin/clang-scan-deps-23"
+      - "/usr/bin/clang-scan-deps23"
+      - "/usr/sbin/clang-scan-deps23"
+      - "/usr/local/sbin/clang-scan-deps23"
+      - "/usr/local/bin/clang-scan-deps23"
+      - "/sbin/clang-scan-deps23"
+      - "/bin/clang-scan-deps23"
+    found: "/usr/bin/clang-scan-deps"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Platform/Windows-Clang.cmake:210 (find_program)"
+      - "/usr/share/cmake/Modules/Platform/Windows-Clang-CXX.cmake:1 (include)"
+      - "/usr/share/cmake/Modules/CMakeCXXInformation.cmake:48 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "__RC_COMPILER_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "rc"
+    candidate_directories:
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/sbin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+      - "/usr/bin/"
+      - "/usr/sbin/"
+      - "/usr/"
+      - "/usr/local/bin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/"
+      - "/bin/"
+      - "/sbin/"
+    searched_directories:
+      - "/usr/local/sbin/rc"
+      - "/usr/local/bin/rc"
+      - "/usr/sbin/rc"
+      - "/usr/bin/rc"
+      - "/sbin/rc"
+      - "/bin/rc"
+      - "/usr/bin/rc"
+      - "/usr/sbin/rc"
+      - "/usr/rc"
+      - "/usr/local/bin/rc"
+      - "/usr/local/sbin/rc"
+      - "/usr/local/rc"
+      - "/bin/rc"
+      - "/sbin/rc"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+      CMAKE_INSTALL_PREFIX: "/usr/local"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "/usr"
+        - "/usr/local"
+        - "/"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Platform/Windows-Clang.cmake:216 (find_program)"
+      - "/usr/share/cmake/Modules/Platform/Windows-Clang-CXX.cmake:1 (include)"
+      - "/usr/share/cmake/Modules/CMakeCXXInformation.cmake:48 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "__RC_COMPILER_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "llvm-rc"
+    candidate_directories:
+      - "/usr/local/sbin/"
+      - "/usr/local/bin/"
+      - "/usr/sbin/"
+      - "/usr/bin/"
+      - "/sbin/"
+      - "/bin/"
+      - "/usr/bin/"
+      - "/usr/sbin/"
+      - "/usr/"
+      - "/usr/local/bin/"
+      - "/usr/local/sbin/"
+      - "/usr/local/"
+      - "/bin/"
+      - "/sbin/"
+    searched_directories:
+      - "/usr/local/sbin/llvm-rc"
+      - "/usr/local/bin/llvm-rc"
+    found: "/usr/sbin/llvm-rc"
+    search_context:
+      ENV{PATH}:
+        - "/usr/local/sbin"
+        - "/usr/local/bin"
+        - "/usr/sbin"
+        - "/usr/bin"
+        - "/sbin"
+        - "/bin"
+      CMAKE_INSTALL_PREFIX: "/usr/local"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "/usr"
+        - "/usr/local"
+        - "/"
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:123 (try_compile)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-45eKmO"
+      binary: "/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-45eKmO"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "/usr/bin/clang-scan-deps"
+      CMAKE_CXX_FLAGS: "/imsvc/home/dev/.xwin/crt/include /imsvc/home/dev/.xwin/sdk/include/ucrt /imsvc/home/dev/.xwin/sdk/include/um /imsvc/home/dev/.xwin/sdk/include/shared --target=x86_64-pc-windows-msvc /EHsc /DWIN32 /D_WINDOWS /EHsc"
+      CMAKE_CXX_FLAGS_RELEASE: "/O2 /Ob2 /DNDEBUG"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_EXE_LINKER_FLAGS: "/libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: false
+      stdout: |
+        Change Dir: '/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-45eKmO'
+        
+        Run Build Command(s): /usr/sbin/ninja -v cmTC_9b1e5
+        [1/2] /usr/sbin/clang-cl  /nologo -TP -D_MBCS  /imsvc/home/dev/.xwin/crt/include /imsvc/home/dev/.xwin/sdk/include/ucrt /imsvc/home/dev/.xwin/sdk/include/um /imsvc/home/dev/.xwin/sdk/include/shared --target=x86_64-pc-windows-msvc /EHsc /DWIN32 /D_WINDOWS /EHsc  /O2 /Ob2 /DNDEBUG -MD -clang:-MD -clang:-MTCMakeFiles/cmTC_9b1e5.dir/CMakeCXXCompilerABI.cpp.obj -clang:-MFCMakeFiles/cmTC_9b1e5.dir/CMakeCXXCompilerABI.cpp.obj.d /FoCMakeFiles/cmTC_9b1e5.dir/CMakeCXXCompilerABI.cpp.obj /FdCMakeFiles/cmTC_9b1e5.dir/ -c -- /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+        [2/2] : && /usr/sbin/cmake -E vs_link_exe --msvc-ver=1933 --intdir=CMakeFiles/cmTC_9b1e5.dir --rc=llvm-rc --mt=/usr/sbin/llvm-mt --manifests  -- /usr/sbin/lld-link /nologo CMakeFiles/cmTC_9b1e5.dir/CMakeCXXCompilerABI.cpp.obj  /out:cmTC_9b1e5.exe /implib:cmTC_9b1e5.lib /pdb:cmTC_9b1e5.pdb /version:0.0 /libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64  /INCREMENTAL:NO /subsystem:console   && :
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:291 (message)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|"|[0-9]+>[ 	-]*Build:[ 	0-9]+ ms[ 	]*)?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
+        link line: [[2/2] : && /usr/sbin/cmake -E vs_link_exe --msvc-ver=1933 --intdir=CMakeFiles/cmTC_9b1e5.dir --rc=llvm-rc --mt=/usr/sbin/llvm-mt --manifests  -- /usr/sbin/lld-link /nologo CMakeFiles/cmTC_9b1e5.dir/CMakeCXXCompilerABI.cpp.obj  /out:cmTC_9b1e5.exe /implib:cmTC_9b1e5.lib /pdb:cmTC_9b1e5.pdb /version:0.0 /libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64  /INCREMENTAL:NO /subsystem:console   && :] ==> linker [/usr/sbin/lld-link]
+        linker tool for 'CXX': /usr/sbin/lld-link 
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake:41 (message)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:337 (cmake_determine_linker_id)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the CXX compiler's linker: "/usr/sbin/lld-link" "-v"
+      lld-link: warning: ignoring unknown argument '-v'
+      lld-link: error: no input files
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake:41 (message)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:337 (cmake_determine_linker_id)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the CXX compiler's linker: "/usr/sbin/lld-link" "-V"
+      lld-link: warning: ignoring unknown argument '-V'
+      lld-link: error: no input files
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Internal/CMakeDetermineLinkerId.cmake:41 (message)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerABI.cmake:337 (cmake_determine_linker_id)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the CXX compiler's linker: "/usr/sbin/lld-link" "--version"
+      LLD 23.1.4
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Internal/FeatureTesting.cmake:34 (try_compile)"
+      - "/usr/share/cmake/Modules/Internal/FeatureTesting.cmake:88 (_record_compiler_features)"
+      - "/usr/share/cmake/Modules/Compiler/CMakeCommonCompilerMacros.cmake:124 (_record_compiler_features_cxx)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerSupport.cmake:116 (cmake_record_cxx_compile_features)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:81 (CMAKE_DETERMINE_COMPILER_SUPPORT)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compile features"
+    directories:
+      source: "/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-RRIHzR"
+      binary: "/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-RRIHzR"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "/usr/bin/clang-scan-deps"
+      CMAKE_CXX_FLAGS: "/imsvc/home/dev/.xwin/crt/include /imsvc/home/dev/.xwin/sdk/include/ucrt /imsvc/home/dev/.xwin/sdk/include/um /imsvc/home/dev/.xwin/sdk/include/shared --target=x86_64-pc-windows-msvc /EHsc /DWIN32 /D_WINDOWS /EHsc"
+      CMAKE_CXX_FLAGS_RELEASE: "/O2 /Ob2 /DNDEBUG"
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_EXE_LINKER_FLAGS: "/libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64"
+    buildResult:
+      variable: "CMAKE_CXX_FEATURE_TEST"
+      cached: false
+      stdout: |
+        Change Dir: '/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-RRIHzR'
+        
+        Run Build Command(s): /usr/sbin/ninja -v cmTC_f0317
+        [1/2] /usr/sbin/clang-cl  /nologo -TP -D_MBCS  /imsvc/home/dev/.xwin/crt/include /imsvc/home/dev/.xwin/sdk/include/ucrt /imsvc/home/dev/.xwin/sdk/include/um /imsvc/home/dev/.xwin/sdk/include/shared --target=x86_64-pc-windows-msvc /EHsc /DWIN32 /D_WINDOWS /EHsc  /O2 /Ob2 /DNDEBUG -MD   -std:c++14 -clang:-MD -clang:-MTCMakeFiles/cmTC_f0317.dir/feature_tests.cxx.obj -clang:-MFCMakeFiles/cmTC_f0317.dir/feature_tests.cxx.obj.d /FoCMakeFiles/cmTC_f0317.dir/feature_tests.cxx.obj /FdCMakeFiles/cmTC_f0317.dir/ -c -- /workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-RRIHzR/feature_tests.cxx
+        [2/2] : && /usr/sbin/cmake -E vs_link_exe --msvc-ver=1933 --intdir=CMakeFiles/cmTC_f0317.dir --rc=llvm-rc --mt=/usr/sbin/llvm-mt --manifests  -- /usr/sbin/lld-link /nologo CMakeFiles/cmTC_f0317.dir/feature_tests.cxx.obj  /out:cmTC_f0317.exe /implib:cmTC_f0317.lib /pdb:cmTC_f0317.pdb /version:0.0 /libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64  /INCREMENTAL:NO /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && :
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/share/cmake/Modules/Internal/FeatureTesting.cmake:34 (try_compile)"
+      - "/usr/share/cmake/Modules/Internal/FeatureTesting.cmake:88 (_record_compiler_features)"
+      - "/usr/share/cmake/Modules/Compiler/CMakeCommonCompilerMacros.cmake:132 (_record_compiler_features_cxx)"
+      - "/usr/share/cmake/Modules/CMakeDetermineCompilerSupport.cmake:116 (cmake_record_cxx_compile_features)"
+      - "/usr/share/cmake/Modules/CMakeTestCXXCompiler.cmake:81 (CMAKE_DETERMINE_COMPILER_SUPPORT)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compile features"
+    directories:
+      source: "/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-b2HvvF"
+      binary: "/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-b2HvvF"
+    cmakeVariables:
+      CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "/usr/bin/clang-scan-deps"
+      CMAKE_CXX_FLAGS: "/imsvc/home/dev/.xwin/crt/include /imsvc/home/dev/.xwin/sdk/include/ucrt /imsvc/home/dev/.xwin/sdk/include/um /imsvc/home/dev/.xwin/sdk/include/shared --target=x86_64-pc-windows-msvc /EHsc /DWIN32 /D_WINDOWS /EHsc"
+      CMAKE_CXX_FLAGS_RELEASE: "/O2 /Ob2 /DNDEBUG"
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_EXE_LINKER_FLAGS: "/libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64"
+    buildResult:
+      variable: "CMAKE_CXX_FEATURE_TEST"
+      cached: false
+      stdout: |
+        Change Dir: '/workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-b2HvvF'
+        
+        Run Build Command(s): /usr/sbin/ninja -v cmTC_17df1
+        [1/2] /usr/sbin/clang-cl  /nologo -TP -D_MBCS  /imsvc/home/dev/.xwin/crt/include /imsvc/home/dev/.xwin/sdk/include/ucrt /imsvc/home/dev/.xwin/sdk/include/um /imsvc/home/dev/.xwin/sdk/include/shared --target=x86_64-pc-windows-msvc /EHsc /DWIN32 /D_WINDOWS /EHsc  /O2 /Ob2 /DNDEBUG -MD -clang:-MD -clang:-MTCMakeFiles/cmTC_17df1.dir/feature_tests.cxx.obj -clang:-MFCMakeFiles/cmTC_17df1.dir/feature_tests.cxx.obj.d /FoCMakeFiles/cmTC_17df1.dir/feature_tests.cxx.obj /FdCMakeFiles/cmTC_17df1.dir/ -c -- /workspace/build-release/CMakeFiles/CMakeScratch/TryCompile-b2HvvF/feature_tests.cxx
+        [2/2] : && /usr/sbin/cmake -E vs_link_exe --msvc-ver=1933 --intdir=CMakeFiles/cmTC_17df1.dir --rc=llvm-rc --mt=/usr/sbin/llvm-mt --manifests  -- /usr/sbin/lld-link /nologo CMakeFiles/cmTC_17df1.dir/feature_tests.cxx.obj  /out:cmTC_17df1.exe /implib:cmTC_17df1.lib /pdb:cmTC_17df1.pdb /version:0.0 /libpath:/home/dev/.xwin/crt/lib/x86_64 /libpath:/home/dev/.xwin/sdk/lib/um/x86_64 /libpath:/home/dev/.xwin/sdk/lib/ucrt/x86_64 /machine:x64  /INCREMENTAL:NO /subsystem:console  kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib && :
+        
+      exitCode: 0
+...
