@@ -53,6 +53,21 @@ Exclus comme demandé : M6, M9.
 - **M10.3** : entrée « 4.1.2 (provider pilote) » dans le menu, avec le modèle relevé dans les shaders du
   pilote (FP8 / INT8 / INT8-2 / INT8 Lite) ou le modèle attendu d'après le nom RADV du GPU.
 
+## Suite de la session (travail sans test en jeu)
+
+- **Correctif M8.1** : l'insertion au SMAA se désarmait dès la première frame (CB View pas encore appris au
+  moment du SMAA). Les passes SMAA ne sont plus sautées avant que le CB soit connu ; une entrée manquante
+  ne provoque qu'un repli d'une frame.
+- **Mesures comparables** des deux backends (timestamps D3D11) : DX11 préparation / FSR / copie, et chemin
+  Vulkan complet (copies + flush + FSR), mesuré seulement overlay affiché.
+- **M8.5** codé (exposition du jeu, texture 1×1 du tonemapper repérée automatiquement, interprétation
+  réglable).
+- **M10.2** : décodeur de prologues extrait et testé (`tests/x64_decode_test.cpp`), `can_provide` vérifié.
+- **Outils de test** : bouton « Rapport de test » (fichier + presse-papiers), « Profil de test » (une étape
+  en un clic), explorateur de pixel shaders (pluie, M7.3), diagnostic d'environnement au premier lancement
+  (DLL présentes, prologue de `vkCreateDevice` et verdict du détour, sans activer l'option).
+- Compilation revérifiée commit par commit ; tests natifs OK.
+
 ## Blocages
 
 - **M7.3 — RCAS après tonemap** : le RCAS intégré à FSR (`Sharpness`) couvre le besoin. Un RCAS
@@ -78,7 +93,9 @@ Exclus comme demandé : M6, M9.
 
 ## Prochaines étapes proposées
 
-1. Tester dans l'ordre de TESTING.md sur PC, puis sur Deck (M8.1 + M8.2 en priorité pour le budget).
-2. Me renvoyer `ReShade.log` et les lignes signalées « me transmettre ».
+1. Premier lancement option coupée : me renvoyer les lignes `diagnostic :` de `ReShade.log`.
+2. Tester dans l'ordre de TESTING.md (combo « Profil de test »), sur PC puis Deck (M8.1 + M8.2 en priorité
+   pour le budget) ; après chaque étape, « Rapport de test », puis m'envoyer `ak-fsr-report.txt` et
+   `ReShade.log`.
 3. Selon les résultats : garder ou retirer M8.3 ; ajuster `LodBias` ; corriger M10.2 au besoin.
 4. Capture F10 sous la pluie pour débloquer M7.3.
