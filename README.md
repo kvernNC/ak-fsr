@@ -40,23 +40,47 @@ vecteurs de mouvement, insertion avant le post-traitement), réimplémentée de 
 4. En jeu, ouvrir l'overlay ReShade → onglet **AK-FSR** (mode FSR actif par défaut).
 5. Désactiver les effets d'AA de ReShade (SMAA, FXAA) : ils s'appliqueraient après FSR, sur l'interface.
 
-Options expérimentales (branche `wip/m6-m10`, toutes désactivées par défaut, voir [TESTING.md](TESTING.md)) :
-touche on/off, hautes lumières hors FSR, insertion au SMAA du jeu, backend FSR 3 DX11 natif
-(`ak-fsr-dx11.dll` à copier aussi), vecteurs du jeu, biais de LOD, FSR 4 par le provider du pilote AMD
-(DLL AMD à placer dans `Binaries/Win64/ak-fsr/`).
+### Options (toutes désactivées par défaut)
+
+Onglet **AK-FSR** ou section `[AK-FSR]` de `ReShade.ini`. Détails et procédure de test : [TESTING.md](TESTING.md).
+
+| Option | Clé | État (PC, 27/10/2026) |
+|---|---|---|
+| Touche on/off | `ToggleKey` | validée |
+| Hautes lumières hors FSR | `Highlights` | validée (fonctionnement) |
+| FSR à la place du SMAA du jeu (AA du jeu sur « On ») | `SmaaInsertion=1` | validée, coût du SMAA récupéré |
+| Backend FSR 3 DX11 natif (`ak-fsr-dx11.dll` à copier) | `Backend=1` | validée, moins coûteux que Vulkan |
+| Vecteurs de mouvement du jeu | `GameMotionVectors=1` | fonctionne ; reprojection conservée par défaut |
+| Biais de LOD des textures | `LodBias` | **-1.0 recommandé** avec FSR (netteté +3,5 %, sans scintillement ajouté) ; pris en compte au lancement |
+| Exposition du jeu | `GameExposure=1` | fonctionne ; intérêt qualité à juger |
+| FSR 4 par le provider du pilote AMD | `Fsr4Driver=1` + menu « Version FSR » | validée (FP8, RX 9070 XT) |
+
+Réglages conseillés sur PC : `SmaaInsertion=1` (AA du jeu sur « On »), `LodBias=-1.0`, et FSR 4 si le GPU le
+permet (voir ci-dessous). Le Deck n'a pas encore été testé avec ces options.
+
+Pilotage sans clavier (prise en main à distance) : fichier `ak-fsr-command.txt` à côté de l'addon (`report`,
+`profile <n>`, `toggle`, `screenshot <nom> [n]`, `look`, `capture`…), voir TESTING.md.
 
 ### OptiScaler : à éviter
 
 OptiScaler intercepte FidelityFX et Vulkan dans le processus : avec AK-FSR, plantages constatés (double free
 dans le pilote) et blocages au démarrage. Utiliser ReShade seul en `dxgi.dll`.
 
-### FSR 4 (optionnel, PC RDNA 4)
+### FSR 4 (optionnel, GPU AMD récents)
 
-Avec [OptiScaler](https://github.com/optiscaler/OptiScaler) nightly chargé dans le processus, la version
-« 4.1.2 * » apparaît dans le menu « Version FSR » et fonctionne. **Instable pour l'instant** : selon le
-lancement, le jeu se bloque au démarrage (avant la création de la swapchain) quand OptiScaler et ReShade sont
-chargés ensemble, y compris en `wininet.dll`. Piste non encore testée : OptiScaler en `dxgi.dll` qui charge
-ReShade lui-même (`ReShade64.dll`, `LoadReshade=true`).
+FSR 4.1.2 est obtenu directement du provider du pilote AMD, sans OptiScaler :
+
+1. Placer dans `Binaries/Win64/ak-fsr/` :
+   - `amdvkffx64.dll`, tirée du pilote Windows AMD Adrenalin (archive extraite avec 7-Zip, sans installer le
+     pilote) — propriétaire, jamais dans ce dépôt ;
+   - les DLL signées du FidelityFX SDK 2.3 renommées en `_vk` : `scripts/fetch_ffx_signed.sh` puis
+     `scripts/deploy.sh` s'en chargent (dépôt officiel AMD, MIT, empreintes vérifiées).
+2. RDNA 4 (modèle FP8) : ajouter `radv_cooperative_matrix2_nv=true` au début de la ligne de lancement.
+3. `Fsr4Driver=1`, relancer le jeu, puis choisir « 4.1.2 (provider pilote) » dans le menu « Version FSR ».
+   En cas d'échec, l'addon revient à FSR 3.1 avec un message dans l'onglet.
+
+Mesures sur RX 9070 XT (800×600) : FSR 4 est moins crénelé et scintille moins que FSR 3.1, pour un coût GPU de
+0,26 ms contre 0,17 ms.
 
 ## Compilation (depuis Linux)
 
@@ -68,6 +92,7 @@ git clone --recurse-submodules <ce dépôt>        # ou : git submodule update -
 xwin --accept-license --cache-dir ~/.xwin-cache splat --output ~/.xwin
 scripts/fetch_ffx.sh                              # amd_fidelityfx_vk.dll (SDK v1.1.4, empreinte vérifiée)
 scripts/fetch_ffx_dx11.sh                         # facultatif : backend DX11 (M8.2) -> ak-fsr-dx11.dll
+scripts/fetch_ffx_signed.sh                       # facultatif : DLL signées du SDK 2.3 pour FSR 4 (M10)
 cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/clang-cl-xwin.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 scripts/deploy.sh                                 # copie vers le dossier du jeu (AK_GAME_DIR pour le changer)
@@ -84,10 +109,14 @@ précompilés dans `src/shaders/` ; `scripts/build_shaders.sh` les régénère (
 | M4 : jitter | fait (PC) |
 | M5 : vélocité des objets | fait (PC) |
 | M6 : shaders sensibles au jitter | éclairage différé corrigé ; AO, réflexions, décalques à voir |
-| M7 : finitions (touche on/off, pluie, hautes lumières…) | à faire |
+| M7 : finitions | touche on/off et hautes lumières faites ; pluie après l'AA : passes non identifiées |
+| M8 : optimisations (insertion au SMAA, backend DX11, vecteurs du jeu, biais de LOD, exposition) | faites (PC), Deck à tester |
+| M10 : FSR 4 par le provider du pilote AMD, sans OptiScaler | fait (PC, FP8), Deck à tester |
 
-- Coût sur Steam Deck : environ 3,4 ms par frame (FSR 3.1 en 800p), au-delà du budget visé de 2 ms.
-- Les détails plus fins qu'un pixel peuvent encore sautiller en mouvement (limite de FSR 3.1).
+- Coût sur Steam Deck mesuré avant M8 : environ 3,4 ms par frame (FSR 3.1 en 800p, chemin Vulkan), au-delà du
+  budget visé de 2 ms ; M8.1 (SMAA récupéré) et M8.2 (DX11) doivent le réduire.
+- Les détails plus fins qu'un pixel peuvent encore sautiller en mouvement (moins avec FSR 4).
+- Journal des tests et blocages : [PROGRESS.md](PROGRESS.md).
 - Le détail de la conception, des passes du jeu et des pièges rencontrés est dans [PLAN.md](PLAN.md).
 
 ## Crédits et licences
