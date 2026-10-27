@@ -316,8 +316,26 @@ void next_test_profile() {
 //   report            rapport de test
 //   profile <n>|next  profil de test n (0 = référence) ou suivant
 //   toggle            touche on/off
+//   shaders           active l'explorateur de PS et écrit la liste de la frame dans ak-fsr-shaders.txt
+//   hide <hash> / show <hash>|all  masque / rétablit les draws d'un PS (hash hexadécimal, 0x facultatif)
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
 //                         (<nom>_0.png …, n ≤ 16) pour juger le scintillement
+int g_shader_dump_in = 0;  // frames avant l'écriture de ak-fsr-shaders.txt (0 : rien)
+
+void dump_shader_list() {
+  const auto entries = akfsr::explorer::get_entries();
+  const auto path = g_addon_dir / "ak-fsr-shaders.txt";
+  FILE *f = nullptr;
+  if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || f == nullptr) return;
+  std::fprintf(f, "# ordre ; hash ; position ; draws ; sommets ; masqué\n");
+  int i = 0;
+  for (const auto &e : entries)
+    std::fprintf(f, "%3d 0x%08X %-16s %5u %9u %s\n", i++, e.hash, e.after_insertion ? "après_insertion" : "avant",
+                 e.draws, e.vertices, e.hidden ? "masqué" : "");
+  std::fclose(f);
+  log_fmt(reshade::log::level::info, "AK-FSR: liste des pixel shaders écrite : %zu PS", entries.size());
+}
+
 std::string g_burst_name;
 int g_burst_total = 0, g_burst_done = 0;
 
@@ -341,6 +359,20 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     }
   } else if (cmd == "toggle") {
     akfsr::insertion::toggle_bypass();
+  } else if (cmd == "shaders") {
+    akfsr::explorer::set_enabled(true);
+    g_shader_dump_in = 3;  // laisser l'explorateur remplir une frame complète
+  } else if (cmd == "hide" || cmd == "show") {
+    akfsr::explorer::set_enabled(true);
+    if (cmd == "show" && arg == "all") {
+      akfsr::explorer::clear_hidden();
+    } else {
+      const uint32_t hash = static_cast<uint32_t>(std::strtoul(arg.c_str(), nullptr, 16));
+      if (hash == 0)
+        log_fmt(reshade::log::level::warning, "AK-FSR: commande : hash invalide « %s »", arg.c_str());
+      else
+        akfsr::explorer::set_hidden(hash, cmd == "hide");
+    }
   } else if (cmd == "screenshot") {
     std::string name = arg.empty() ? "capture" : arg;
     int frames = 1;
@@ -370,6 +402,7 @@ void capture_burst(reshade::api::effect_runtime *runtime) {
 
 void poll_command_file(reshade::api::effect_runtime *runtime) {
   capture_burst(runtime);
+  if (g_shader_dump_in > 0 && --g_shader_dump_in == 0) dump_shader_list();
   static uint32_t frame = 0;
   if (++frame % 30 != 0) return;
   const auto path = g_addon_dir / "ak-fsr-command.txt";

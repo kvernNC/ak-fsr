@@ -21,6 +21,8 @@ Sans overlay (petite fenêtre, prise en main à distance) :
 - Pilotage par fichier (sans clavier) : `ak-fsr-command.txt` à côté de l'addon, lu deux fois par seconde puis
   supprimé ; une commande par ligne : `report`, `profile <n>` (0 = référence) ou `profile next`, `toggle`,
   `screenshot <nom> [n]` (PNG sans compression dans `ak-fsr-shots/`, n frames consécutives ≤ 16).
+  `shaders` (liste des PS de la frame dans `ak-fsr-shaders.txt`),
+  `hide <hash>`, `show <hash>|all` (masquer / rétablir un PS, pour la pluie M7.3).
   Le log note `AK-FSR: commande : …`.
 - Le profil actif est sauvegardé : avant de quitter, revenir à « 0. Référence » (sinon un profil « relancer »
   s'applique au lancement suivant).
