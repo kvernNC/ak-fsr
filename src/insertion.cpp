@@ -115,7 +115,7 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
 
   device *dev = cmd->get_device();
   // Backend DX11 (M8.2) : pas d'interop Vulkan.
-  const bool need_vk = m != mode::fsr || get_fsr_settings().fsr_backend == fsr::backend::vulkan;
+  const bool need_vk = m != mode::fsr || get_fsr_settings().fsr_backend == fsr::backend::vulkan || !fsr::dx11::available();
   if (need_vk && !vk::init(reinterpret_cast<ID3D11Device *>(dev->get_native()))) {
     if (!g_logged_failure.exchange(true)) {
       reshade::log::message(reshade::log::level::error, ("AK-FSR: interop Vulkan indisponible : " + vk::status()).c_str());

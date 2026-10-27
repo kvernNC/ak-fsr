@@ -373,6 +373,11 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
   return ok;
 }
 
+bool available() {
+  std::string error;
+  return load_bridge(error);
+}
+
 gpu_timings get_gpu_timings() {
   std::lock_guard lock(g_timing_mutex);
   return g_timings;

@@ -16,12 +16,16 @@ namespace akfsr::fsr {
 
 // Défauts : version de développement = nouveautés coupées (tests un par un) ; version publiée = réglages validés
 // en jeu (PROGRESS.md) : SMAA du jeu remplacé quand il est actif, biais de LOD -1.
+enum class backend : int;
 #if AKFSR_DEV_TOOLS
 inline constexpr bool kDefaultSmaaInsertion = false;
 inline constexpr float kDefaultLodBias = 0.0f;
+inline constexpr int kDefaultBackend = 0;  // Vulkan
 #else
+// Backend DX11 : sur le Deck, FSR 3.1 coûte 2,1 ms de plus par frame au lieu de 5,6 ms en Vulkan (27/10/2026).
 inline constexpr bool kDefaultSmaaInsertion = true;
 inline constexpr float kDefaultLodBias = -1.0f;
+inline constexpr int kDefaultBackend = 1;  // DX11, repli sur Vulkan si ak-fsr-dx11.dll manque
 #endif
 
 // Début du CB View copié à chaque frame : c0..c21 (ViewProj courante et précédente, …, c21 = origine du
@@ -44,7 +48,7 @@ struct settings {
   bool highlights = false;        // M7 : hautes lumières sorties de FSR puis rajoutées
   float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
   bool smaa_insertion = kDefaultSmaaInsertion;  // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
-  backend fsr_backend = backend::vulkan;  // M8.2
+  backend fsr_backend = static_cast<backend>(kDefaultBackend);  // M8.2
   // M8.3 : vélocité du G-buffer (RT4) passée telle quelle à FSR, sans reprojection (jitter annulé par FSR).
   bool game_mv = false;
   int game_mv_scale = 0;     // 0 : UV (× taille, lecture de M5) ; 1 : [-1, 1] (× taille / 2, lecture de Luma)
