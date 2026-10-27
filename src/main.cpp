@@ -82,8 +82,7 @@ const test_profile kTestProfiles[] = {
        s.fsr4_driver = true;
        s.version_id = akfsr::fsr4::kDriverVersionId;
      }},
-    // M8.5 neutralisé sauf ExposureExperimental=1 (analyse du plantage).
-    {"10. M8.5 exposition du jeu (expérimental)", [](akfsr::fsr::settings &s) { s.game_exposure = true; }},
+    {"10. M8.5 exposition du jeu", [](akfsr::fsr::settings &s) { s.game_exposure = true; }},
 };
 
 // Garde la netteté, l'auto-exposition et la vue de debug de l'utilisateur ; le reste revient au défaut.
@@ -546,7 +545,7 @@ void on_overlay(reshade::api::effect_runtime *) {
     const auto lb = akfsr::lod_bias::get_stats();
     ImGui::Text("    en vigueur : %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified, lb.skipped);
   }
-  fsr_changed |= ImGui::Checkbox("Exposition du jeu (M8.5, neutralisée : plantage)", &fsr_settings.game_exposure);
+  fsr_changed |= ImGui::Checkbox("Exposition du jeu (M8.5)", &fsr_settings.game_exposure);
   if (fsr_settings.game_exposure) {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(140);

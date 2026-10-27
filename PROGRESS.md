@@ -12,7 +12,7 @@ procédure de test détaillée dans [TESTING.md](TESTING.md). Version de l'addon
 | M8.2 backend FSR 3 DX11 natif | codé, à tester (DLL séparée) | `Backend=1` |
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
 | M8.4 biais de LOD des textures | codé, à tester | `LodBias` |
-| M8.5 exposition du jeu | **neutralisé** : le jeu plante après l'arrêt de l'option (voir Blocages) | `GameExposure` + `ExposureExperimental=1` |
+| M8.5 exposition du jeu | fonctionne (sans OptiScaler) ; intérêt qualité à juger | `GameExposure`, `ExposureMode`, `ExposureScale` |
 | M10.2 provider FSR 4 du pilote | codé, à tester (DLL AMD à fournir) | `Fsr4Driver`, `Version` |
 | M10.3 menu Version FSR (2 / 3 / 4) | codé, à tester | `Version` |
 
@@ -70,12 +70,10 @@ Exclus comme demandé : M6, M9.
 
 ## Blocages
 
-- **M8.5 — plantage** : activer l'exposition du jeu fonctionne, mais le jeu plante (`free(): double free
-  detected in tcache 2`, côté Linux, sur le thread de rendu) 20 à 500 ms après l'avoir coupée, de façon
-  reproductible (3 fois). Ni la recréation du contexte FSR, ni la reconstruction complète des ressources FSR
-  n'y changent rien. Pistes : le CS D3D11 de conversion (compilé par vkd3d) ou le passage de la texture à
-  FidelityFX ; à départager en activant l'un sans l'autre. Option neutralisée (ignorée sauf
-  `ExposureExperimental=1`) et retirée des profils de test.
+- **Incompatibilité avec OptiScaler** : avec OptiScaler chargé (il intercepte FidelityFX et Vulkan), couper
+  M8.5 faisait planter le jeu (`free(): double free detected in tcache 2`, 3 fois sur 3). Sans OptiScaler
+  (ReShade seul en `dxgi.dll`) : 4 cycles M8.5 → référence sans erreur. **Ne pas utiliser AK-FSR avec
+  OptiScaler** (M10 remplace d'ailleurs son rôle pour FSR 4).
 
 - **M7.3 — RCAS après tonemap** : le RCAS intégré à FSR (`Sharpness`) couvre le besoin. Un RCAS
   après le tonemap (variante sans grain du mod DLAA) demande d'agir *après* le dispatch du tonemapper ;
@@ -101,7 +99,12 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
 - Sans OptiScaler (ReShade 6.8.0 seul en `dxgi.dll`), AA du jeu sur « On » : **M8.1 fonctionne** (FSR remplace
   le SMAA, couleur r11g11b10 → r11g11b10, profondeur de SMAAEdgeDetection, 0 échec) ; M8.1 + M8.2 aussi, mais
   `SwapDeviceContextState` faussait l'état D3D11 vu par les passes suivantes (CB View non retrouvé, données de
-  caméra pourtant à jour) : remplacé par une sauvegarde/restauration complète de l'étage compute, à revalider.
+  caméra pourtant à jour) : remplacé par une sauvegarde/restauration complète de l'étage compute, **validé**
+  (CB View trouvé, 1230 frames).
+- Captures PNG (commande `screenshot`) analysées : images correctes dans tous les profils ; par rapport au SMAA
+  du jeu, FSR réduit l'énergie haute fréquence de 14 à 16 % et l'instabilité entre frames de 6 à 34 %
+  (scène cinématique, écarts entre variantes FSR non significatifs).
+- M8.5 : fonctionne sans OptiScaler, luminosité inchangée (attendu) ; voir Blocages pour OptiScaler.
 
 ## Points incertains à vérifier en priorité (M10.2)
 

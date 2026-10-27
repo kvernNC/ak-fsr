@@ -45,6 +45,11 @@ touche on/off, hautes lumières hors FSR, insertion au SMAA du jeu, backend FSR 
 (`ak-fsr-dx11.dll` à copier aussi), vecteurs du jeu, biais de LOD, FSR 4 par le provider du pilote AMD
 (DLL AMD à placer dans `Binaries/Win64/ak-fsr/`).
 
+### OptiScaler : à éviter
+
+OptiScaler intercepte FidelityFX et Vulkan dans le processus : avec AK-FSR, plantages constatés (double free
+dans le pilote) et blocages au démarrage. Utiliser ReShade seul en `dxgi.dll`.
+
 ### FSR 4 (optionnel, PC RDNA 4)
 
 Avec [OptiScaler](https://github.com/optiscaler/OptiScaler) nightly chargé dans le processus, la version

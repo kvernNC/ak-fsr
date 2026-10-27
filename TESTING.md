@@ -1,5 +1,8 @@
 # AK-FSR — procédure de test de la branche `wip/m6-m10`
 
+**Prérequis : pas d'OptiScaler** (ReShade seul en `dxgi.dll`) ; il intercepte FidelityFX et Vulkan et fait planter
+le jeu avec certaines options.
+
 Toutes les nouveautés sont **désactivées par défaut** : sans toucher à `ReShade.ini`, l'addon se comporte
 comme la v0.6.3 (Vulkan, insertion `0xB2A276FD`, FSR 3.1). Tester **une option à la fois**, dans l'ordre
 ci-dessous, en repartant de la configuration par défaut entre deux tests.
@@ -201,10 +204,9 @@ fichier avec `ReShade.log`.
 - Me noter le ou les hash qui font disparaître la pluie, et s'ils sont « avant » ou « après insertion ».
   Faire aussi un rapport de test et une capture F10 au même moment.
 
-## 10. M8.5 — Exposition du jeu (à la place de l'auto-exposition de FSR) — NEUTRALISÉ
+## 10. M8.5 — Exposition du jeu (à la place de l'auto-exposition de FSR)
 
-> Plantage reproductible après l'arrêt de l'option (voir PROGRESS.md) : ne pas tester sans
-> `ExposureExperimental=1`, et seulement pour l'analyse du plantage.
+> **Sans OptiScaler** : avec lui, couper l'option fait planter le jeu (voir PROGRESS.md).
 
 - Diagnostic d'abord, option coupée : ligne **« exposition 1x1 (M8.5) »** de l'onglet et log
   `tonemap 0x…: texture 1x1 <format> en tN (exposition du jeu ?)`. Si rien n'apparaît, le tonemapper ne lit
