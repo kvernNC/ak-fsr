@@ -196,8 +196,10 @@ bool ensure_shared(ID3D11Device *dev, std::string &error) {
   return g.prepare != nullptr;
 }
 
-bool ensure_textures(ID3D11Device *dev, const D3D11_TEXTURE2D_DESC &color, std::string &error) {
-  if (g.output != nullptr && g.format == color.Format && g.width == color.Width && g.height == color.Height)
+bool ensure_textures(ID3D11Device *dev, const D3D11_TEXTURE2D_DESC &color, bool exposure, std::string &error) {
+  // M8.5 : bascule de l'exposition = tout reconstruire (voir fsr.cpp, ensure_images).
+  if (g.output != nullptr && g.format == color.Format && g.width == color.Width && g.height == color.Height &&
+      g.ctx_exposure == exposure)
     return true;
   release_textures();
   UINT support = 0;
@@ -285,7 +287,7 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
   dev->GetImmediateContext(&imm);
   ID3D11DeviceContext1 *imm1 = nullptr;
   if (imm != nullptr) imm->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void **>(&imm1));
-  bool ok = imm1 != nullptr && load_bridge(error) && ensure_shared(dev, error) && ensure_textures(dev, color, error) &&
+  bool ok = imm1 != nullptr && load_bridge(error) && ensure_shared(dev, error) && ensure_textures(dev, color, in.exposure != nullptr, error) &&
             ensure_context(dev, s, in.exposure != nullptr, error);
   if (imm1 == nullptr && error.empty()) error = "ID3D11DeviceContext1 indisponible";
 

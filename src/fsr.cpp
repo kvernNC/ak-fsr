@@ -52,6 +52,7 @@ struct state {
   bool ctx_game_mv = false;
   bool ctx_driver = false;  // M10.2 : contexte du provider FSR 4 du pilote
   bool ctx_exposure = false;  // M8.5 : contexte utilisé avec une texture d'exposition
+  bool images_exposure = false;  // M8.5 : images créées pour une frame avec exposition
   uint64_t ctx_version = 0;
   bool versions_queried = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
@@ -278,8 +279,16 @@ void query_versions() {
   }
 }
 
-bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height) {
-  if (g.color_in.handle != VK_NULL_HANDLE && g.format == format && g.width == width && g.height == height) return true;
+// `exposure` : M8.5 actif. Toute bascule reconstruit tout (images, contexte), comme un changement de taille :
+// garder les images en ne recréant que le contexte plante encore (double free dans le pilote, constaté en jeu).
+bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exposure) {
+  if (g.color_in.handle != VK_NULL_HANDLE && g.format == format && g.width == width && g.height == height &&
+      g.images_exposure == exposure)
+    return true;
+  if (g.color_in.handle != VK_NULL_HANDLE && g.images_exposure != exposure)
+    reshade::log::message(reshade::log::level::info,
+                          exposure ? "AK-FSR: exposition du jeu activée : ressources FSR reconstruites"
+                                   : "AK-FSR: exposition du jeu coupée : ressources FSR reconstruites");
   static bool hooked = false;
   if (!hooked) {
     hooked = true;
@@ -321,24 +330,14 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height) {
     writes[i].pImageInfo = &images[i];
   }
   fn.vkUpdateDescriptorSets(ctx().device, 4, writes, 0, nullptr);
+  // Image partagée 1×1 de l'exposition (M8.5) : seulement si demandée ; échec = FSR sans exposition.
+  g.images_exposure = exposure;
+  if (exposure && !create_shared_image(g.exposure, DXGI_FORMAT_R32_FLOAT, 1, 1, 0))
+    reshade::log::message(reshade::log::level::error,
+                          ("AK-FSR: exposition du jeu : image partagée 1x1 impossible : " + vk::status()).c_str());
   g.format = format;
   g.width = width;
   g.height = height;
-  return true;
-}
-
-// M8.5 : image partagée 1×1 de l'exposition, créée à la première demande (jamais dans le chemin par défaut).
-bool ensure_exposure_image() {
-  if (g.exposure.handle != VK_NULL_HANDLE) return true;
-  if (!ready() || !create_shared_image(g.exposure, DXGI_FORMAT_R32_FLOAT, 1, 1, 0)) {
-    static bool logged = false;
-    if (!logged) {
-      logged = true;
-      reshade::log::message(reshade::log::level::error,
-                            ("AK-FSR: exposition du jeu : image partagée 1x1 impossible : " + vk::status()).c_str());
-    }
-    return false;
-  }
   return true;
 }
 
@@ -662,9 +661,8 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
 
   if (!ready()) return false;
   if (!load_dll() || !create_pipeline()) return false;
-  if (!ensure_images(desc.Format, desc.Width, desc.Height)) return false;
-  // Après ensure_images, qui détruit les images de la frame quand il les recrée.
-  const bool use_exposure = in.exposure != nullptr && ensure_exposure_image();
+  if (!ensure_images(desc.Format, desc.Width, desc.Height, in.exposure != nullptr)) return false;
+  const bool use_exposure = in.exposure != nullptr && g.exposure.handle != VK_NULL_HANDLE;
   if (!ensure_context(s, use_exposure)) return false;
   compute_params(in, s, g.width, g.height, p);
   const double t0 = p.start_ms;
