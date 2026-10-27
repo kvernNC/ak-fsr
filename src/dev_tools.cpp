@@ -246,6 +246,7 @@ void next_test_profile() {
 //   capture           capture complète d'une frame dans ak-fsr-dumps/ (comme F10)
 //   key <vk>          appui + relâchement d'une touche (code VK hexadécimal, ex. DE = « ' », console UE3)
 //   type <texte>      tape le texte (caractères Unicode) puis Entrée (console UE3)
+//   jitter 0|1, patches 0|1, objects 0|1  jitter, shaders corrigés (M6), vélocité des objets (M5)
 //   look <dx> <dy> <frames>  déplace la souris de (dx, dy) à chaque frame pendant <frames> frames (caméra)
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
@@ -322,6 +323,15 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
       apply_test_profile(kTestProfiles[g_profile]);
     } else {
       log_fmt(reshade::log::level::warning, "AK-FSR: commande : profil inconnu « %s » (0 à %d)", arg.c_str(), count - 1);
+    }
+  } else if (cmd == "jitter" || cmd == "patches" || cmd == "objects") {  // diagnostic : 0 / 1
+    const bool on = std::atoi(arg.c_str()) != 0;
+    if (cmd == "patches") {
+      akfsr::insertion::set_shader_patches_enabled(on);
+    } else {
+      auto s = akfsr::insertion::get_fsr_settings();
+      (cmd == "jitter" ? s.jitter : s.object_velocity) = on;
+      akfsr::insertion::set_fsr_settings(s);
     }
   } else if (cmd == "model") {  // modèle FSR 4 imposé : 0 auto, 1 FP8, 2 INT8, 3 INT8-2, 4 Lite
     auto s = akfsr::insertion::get_fsr_settings();
