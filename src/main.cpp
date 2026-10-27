@@ -319,6 +319,7 @@ void next_test_profile() {
 //   toggle            touche on/off
 //   shaders           active l'explorateur de PS et écrit la liste de la frame dans ak-fsr-shaders.txt
 //   hide <hash> / show <hash>|all  masque / rétablit les draws d'un PS (hash hexadécimal, 0x facultatif)
+//   look <dx> <dy> <frames>  déplace la souris de (dx, dy) à chaque frame pendant <frames> frames (caméra)
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
 //                         (<nom>_0.png …, n ≤ 16) pour juger le scintillement
@@ -336,6 +337,20 @@ void dump_shader_list() {
                  e.draws, e.vertices, e.indirect, e.hidden ? "masqué" : "");
   std::fclose(f);
   log_fmt(reshade::log::level::info, "AK-FSR: liste des pixel shaders écrite : %zu PS", entries.size());
+}
+
+// Mouvement de caméra simulé (commande look) : déplacement relatif de la souris à chaque frame.
+int g_look_dx = 0, g_look_dy = 0, g_look_frames = 0;
+
+void run_look() {
+  if (g_look_frames <= 0) return;
+  --g_look_frames;
+  INPUT input{};
+  input.type = INPUT_MOUSE;
+  input.mi.dx = g_look_dx;
+  input.mi.dy = g_look_dy;
+  input.mi.dwFlags = MOUSEEVENTF_MOVE;
+  SendInput(1, &input, sizeof(input));
 }
 
 // Comparaisons en cours (commande compare) : étape 0 = capture normale puis masquage, 1 = capture masquée.
@@ -396,6 +411,15 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
       else
         akfsr::explorer::set_hidden(hash, cmd == "hide");
     }
+  } else if (cmd == "look") {
+    int dx = 0, dy = 0, frames = 0;
+    if (sscanf_s(arg.c_str(), "%d %d %d", &dx, &dy, &frames) == 3 && frames > 0) {
+      g_look_dx = dx;
+      g_look_dy = dy;
+      g_look_frames = std::min(frames, 600);
+    } else {
+      reshade::log::message(reshade::log::level::warning, "AK-FSR: commande : look <dx> <dy> <frames> attendu");
+    }
   } else if (cmd == "compare") {
     akfsr::explorer::set_enabled(true);
     size_t pos = 0;
@@ -433,6 +457,7 @@ void capture_burst(reshade::api::effect_runtime *runtime) {
 }
 
 void poll_command_file(reshade::api::effect_runtime *runtime) {
+  run_look();
   capture_burst(runtime);
   run_compare(runtime);
   if (g_shader_dump_in > 0 && --g_shader_dump_in == 0) dump_shader_list();

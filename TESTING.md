@@ -24,6 +24,7 @@ Sans overlay (petite fenêtre, prise en main à distance) :
   `shaders` (liste des PS de la frame dans `ak-fsr-shaders.txt`),
   `hide <hash>`, `show <hash>|all` (masquer / rétablir un PS, pour la pluie M7.3).
   `compare <hash> …` : pour chaque PS, captures `<hash>_on` / `<hash>_off` sur deux frames consécutives.
+  `look <dx> <dy> <frames>` : mouvement de souris simulé (rotation de caméra) pendant n frames.
   Le log note `AK-FSR: commande : …`.
 - Le profil actif est sauvegardé : avant de quitter, revenir à « 0. Référence » (sinon un profil « relancer »
   s'applique au lancement suivant).
