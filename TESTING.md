@@ -71,7 +71,7 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   frame (AA du jeu coupé), FSR tourne comme avant à `0xB2A276FD`.
 - Observer dans l'onglet : ligne « SMAA du jeu » `[OK]`, puis « insertion au SMAA (M8.1) : FSR remplace le
   SMAA, N frames » (N augmente). Image : même qualité que la référence (pas de double AA, pas de flou en plus).
-  Comparer les fps avec : (a) référence AA du jeu coupé, (b) référence AA du jeu « Élevé » sans l'option.
+  Comparer les fps avec : (a) référence AA du jeu coupé, (b) référence AA du jeu « On » sans l'option.
   Gain attendu : le coût du SMAA du jeu.
 - Tester aussi : couper l'AA du jeu en cours de partie → l'état passe à « repli sur 0xB2A276FD »,
   l'image reste anti-aliasée.
