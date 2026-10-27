@@ -329,11 +329,11 @@ void dump_shader_list() {
   const auto path = g_addon_dir / "ak-fsr-shaders.txt";
   FILE *f = nullptr;
   if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || f == nullptr) return;
-  std::fprintf(f, "# ordre ; hash ; position ; draws ; sommets ; masqué\n");
+  std::fprintf(f, "# ordre ; hash ; position ; draws ; sommets ; dont indirects ; masqué\n");
   int i = 0;
   for (const auto &e : entries)
-    std::fprintf(f, "%3d 0x%08X %-16s %5u %9u %s\n", i++, e.hash, e.after_insertion ? "après_insertion" : "avant",
-                 e.draws, e.vertices, e.hidden ? "masqué" : "");
+    std::fprintf(f, "%3d 0x%08X %-16s %5u %9u %4u %s\n", i++, e.hash, e.after_insertion ? "après_insertion" : "avant",
+                 e.draws, e.vertices, e.indirect, e.hidden ? "masqué" : "");
   std::fclose(f);
   log_fmt(reshade::log::level::info, "AK-FSR: liste des pixel shaders écrite : %zu PS", entries.size());
 }

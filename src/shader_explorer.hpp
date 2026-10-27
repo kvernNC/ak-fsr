@@ -13,13 +13,14 @@ void set_enabled(bool enabled);
 bool enabled();
 
 // Appelés par passes.cpp sur le contexte immédiat.
-bool on_draw(uint32_t ps_hash, uint32_t vertices);  // true : draw à sauter
+bool on_draw(uint32_t ps_hash, uint32_t vertices, bool indirect = false);  // true : draw à sauter
 void on_insertion();                                 // passage du point d'insertion dans la frame
 void on_present();
 
 struct entry {
   uint32_t hash = 0;
   uint32_t draws = 0, vertices = 0;
+  uint32_t indirect = 0;  // dont draws indirects (nombre de sommets inconnu : particules GPU…)
   bool after_insertion = false;  // première apparition après 0xB2A276FD
   bool hidden = false;
 };

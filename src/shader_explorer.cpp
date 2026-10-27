@@ -23,17 +23,18 @@ void set_enabled(bool enabled) {
 }
 bool enabled() { return g_enabled.load(std::memory_order_relaxed); }
 
-bool on_draw(uint32_t ps_hash, uint32_t vertices) {
+bool on_draw(uint32_t ps_hash, uint32_t vertices, bool indirect) {
   if (!enabled() || ps_hash == 0) return false;
   std::lock_guard lock(g_mutex);
   auto it = g_index.find(ps_hash);
   if (it == g_index.end()) {
     it = g_index.emplace(ps_hash, g_frame.size()).first;
-    g_frame.push_back({ps_hash, 0, 0, g_after_insertion, false});
+    g_frame.push_back({ps_hash, 0, 0, 0, g_after_insertion, false});
   }
   entry &e = g_frame[it->second];
   ++e.draws;
   e.vertices += vertices;
+  if (indirect) ++e.indirect;
   return g_hidden.count(ps_hash) != 0;
 }
 

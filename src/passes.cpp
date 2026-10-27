@@ -110,6 +110,12 @@ bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t,
   const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
   return skip_smaa_draw() || hidden;
 }
+// Draws indirects : explorateur seulement (les particules GPU, comme la pluie, passent souvent par là).
+bool on_indirect(command_list *cmd, indirect_command type, resource, uint64_t, uint32_t, uint32_t) {
+  if (!is_immediate(cmd) || type == indirect_command::dispatch) return false;
+  return explorer::on_draw(g_ps.hash, 0, true);
+}
+
 bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, uint32_t, int32_t, uint32_t) {
   if (!is_immediate(cmd)) return false;
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
@@ -422,6 +428,7 @@ void register_events() {
   reshade::register_event<reshade::addon_event::dispatch>(on_dispatch);
   reshade::register_event<reshade::addon_event::draw>(on_draw);
   reshade::register_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+  reshade::register_event<reshade::addon_event::draw_or_dispatch_indirect>(on_indirect);
   reshade::register_event<reshade::addon_event::map_buffer_region>(on_map_buffer);
   reshade::register_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer);
   reshade::register_event<reshade::addon_event::update_buffer_region>(on_update_buffer);
@@ -440,6 +447,7 @@ void unregister_events() {
   reshade::unregister_event<reshade::addon_event::dispatch>(on_dispatch);
   reshade::unregister_event<reshade::addon_event::draw>(on_draw);
   reshade::unregister_event<reshade::addon_event::draw_indexed>(on_draw_indexed);
+  reshade::unregister_event<reshade::addon_event::draw_or_dispatch_indirect>(on_indirect);
   reshade::unregister_event<reshade::addon_event::map_buffer_region>(on_map_buffer);
   reshade::unregister_event<reshade::addon_event::unmap_buffer_region>(on_unmap_buffer);
   reshade::unregister_event<reshade::addon_event::update_buffer_region>(on_update_buffer);
