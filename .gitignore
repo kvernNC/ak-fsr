@@ -14,3 +14,5 @@ ak-fsr-shaders.txt
 BmSystemSettings.ini.orig-*
 build-*/
 deck-package/
+dist/
+.claude/
