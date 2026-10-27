@@ -42,6 +42,7 @@ struct swapchain_info {
 } g_swapchain;
 
 std::filesystem::path g_addon_dir;
+double g_frame_ms = 0;  // durée moyenne d'une frame sur la dernière seconde (rapport : fps)
 
 template <typename... Args>
 void log_fmt(reshade::log::level level, const char *fmt, Args... args) {
@@ -144,8 +145,9 @@ std::string build_report() {
   const auto info = akfsr::fsr::get_info();
   const auto r = akfsr::passes::get_report();
   const auto t = akfsr::vk::get_timings();
-  add("AK-FSR %s (%s), swapchain %ux%u format %u", AKFSR_VERSION, AKFSR_MILESTONE, g_swapchain.width,
-      g_swapchain.height, static_cast<uint32_t>(g_swapchain.format));
+  add("AK-FSR %s (%s), swapchain %ux%u format %u, %.1f fps (%.2f ms par frame)", AKFSR_VERSION, AKFSR_MILESTONE,
+      g_swapchain.width, g_swapchain.height, static_cast<uint32_t>(g_swapchain.format),
+      g_frame_ms > 0 ? 1000.0 / g_frame_ms : 0.0, g_frame_ms);
   add("[réglages] Mode=%d coupé_par_touche=%d ToggleKey=%u Backend=%d Version=%llu Jitter=%d ShaderPatches=%d",
       static_cast<int>(akfsr::insertion::get_mode()), akfsr::insertion::bypassed() ? 1 : 0,
       akfsr::insertion::get_toggle_key(), static_cast<int>(st.fsr_backend),
@@ -436,8 +438,13 @@ void poll_command_file(reshade::api::effect_runtime *runtime) {
 
 }  // namespace
 
+// Rapport automatique toutes les N secondes ([AK-FSR] AutoReportSeconds, 0 = jamais) : tests sur Steam Deck,
+// sans clavier ni overlay.
+uint32_t g_auto_report_s = 0;
+
 void init(const std::filesystem::path &addon_dir) {
   g_addon_dir = addon_dir;
+  reshade::get_config_value(nullptr, "AK-FSR", "AutoReportSeconds", g_auto_report_s);
   reshade::get_config_value(nullptr, "AK-FSR", "ReportKey", g_report_key.key);
   reshade::get_config_value(nullptr, "AK-FSR", "ReportModifier", g_report_key.modifier);
   reshade::get_config_value(nullptr, "AK-FSR", "ProfileKey", g_profile_key.key);
@@ -449,10 +456,28 @@ void set_swapchain(uint32_t width, uint32_t height, reshade::api::format format)
 }
 
 void on_present(reshade::api::effect_runtime *runtime) {
+  {
+    static ULONGLONG window_start = GetTickCount64();
+    static uint32_t frames = 0;
+    ++frames;
+    const ULONGLONG now = GetTickCount64();
+    if (now - window_start >= 1000) {
+      g_frame_ms = static_cast<double>(now - window_start) / frames;
+      window_start = now;
+      frames = 0;
+    }
+  }
   if (runtime->is_key_pressed(kDumpFrameKey)) akfsr::dump::request_capture();
   if (hotkey_pressed(runtime, g_report_key, g_profile_key)) write_report();
   if (hotkey_pressed(runtime, g_profile_key, g_report_key)) next_test_profile();
   poll_command_file(runtime);
+  if (g_auto_report_s != 0) {
+    static ULONGLONG next = GetTickCount64() + 1000ull * g_auto_report_s;
+    if (GetTickCount64() >= next) {
+      next = GetTickCount64() + 1000ull * g_auto_report_s;
+      write_report();
+    }
+  }
 }
 
 void draw_passes() {
