@@ -53,6 +53,7 @@ struct state {
   bool ctx_driver = false;  // M10.2 : contexte du provider FSR 4 du pilote
   bool ctx_exposure = false;  // M8.5 : contexte utilisé avec une texture d'exposition
   bool images_exposure = false;  // M8.5 : images créées pour une frame avec exposition
+  std::string provider_name;     // version du contexte Vulkan courant
   uint64_t ctx_version = 0;
   bool versions_queried = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
@@ -438,6 +439,7 @@ bool ensure_context(const settings &s, bool exposure) {
                ? provider.versionName
                : "?";
   }
+  g.provider_name = name;
   {
     std::lock_guard lock(g_info_mutex);
     g_info.provider = name;
@@ -665,6 +667,10 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   const bool use_exposure = in.exposure != nullptr && g.exposure.handle != VK_NULL_HANDLE;
   if (!ensure_context(s, use_exposure)) return false;
   compute_params(in, s, g.width, g.height, p);
+  {
+    std::lock_guard lock(g_info_mutex);
+    g_info.provider = g.provider_name;  // après un passage par le backend DX11
+  }
   const double t0 = p.start_ms;
   const push_constants &pc = p.pc;
   const bool objects = p.objects;

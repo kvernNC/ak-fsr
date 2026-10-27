@@ -37,8 +37,8 @@ Exclus comme demandé : M6, M9.
   compilées en **/MD** (`FAILIFMISMATCH RuntimeLibrary=MD_DynamicRelease`) → incompatibles avec l'addon en
   CRT statique. Solution : DLL séparée `ak-fsr-dx11.dll` en CRT dynamique (msvcp140/vcruntime140 de Wine),
   interface C. `ffxGetResourceDX11` y est exportée avec une décoration C++ : reliée par
-  `/alternatename`. Préparation (profondeur, reprojection) portée en HLSL ; état du jeu préservé par
-  `SwapDeviceContextState`. Récupération : `scripts/fetch_ffx_dx11.sh` (commit Luma épinglé, SHA-256).
+  `/alternatename`. Préparation (profondeur, reprojection) portée en HLSL ; état compute du jeu sauvegardé
+  puis restauré. Récupération : `scripts/fetch_ffx_dx11.sh` (commit Luma épinglé, SHA-256).
 - **M8.3** : RT4 passée directement à FSR (annulation du jitter par FSR), échelle et sens de Y réglables
   faute de certitude (M5 lit des UV, Luma des valeurs [-1, 1]). D'après M5, RT4 est nulle sur le décor
   statique : des traînées en rotation de caméra sont probables → garder la reprojection si c'est le cas.
@@ -95,9 +95,13 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
 
 - Défaut, M7.1 (toggle), M7.2, M8.2 (DX11 : **0,18 ms GPU contre 0,27 ms** en Vulkan à 800×600), M8.1+M8.2,
   M8.3 (UV et [-1,1]) : fonctionnent, transitions entre profils sans plantage.
-- M8.1 : repli correct sur `0xB2A276FD` (AA du jeu coupé) ; à retester avec l'AA du jeu sur « Élevé ».
+- M8.1 : repli correct sur `0xB2A276FD` (AA du jeu coupé) ; validé ensuite avec l'AA du jeu sur « On » (voir plus bas).
 - La cible R16G16_FLOAT effacée (méthode de Luma) **est RT4**.
 - Changements de taille de fenêtre : contexte FSR recréé proprement à chaque fois.
+- Sans OptiScaler (ReShade 6.8.0 seul en `dxgi.dll`), AA du jeu sur « On » : **M8.1 fonctionne** (FSR remplace
+  le SMAA, couleur r11g11b10 → r11g11b10, profondeur de SMAAEdgeDetection, 0 échec) ; M8.1 + M8.2 aussi, mais
+  `SwapDeviceContextState` faussait l'état D3D11 vu par les passes suivantes (CB View non retrouvé, données de
+  caméra pourtant à jour) : remplacé par une sauvegarde/restauration complète de l'étage compute, à revalider.
 
 ## Points incertains à vérifier en priorité (M10.2)
 

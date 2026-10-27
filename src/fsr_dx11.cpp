@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <optional>
 
 #include <reshade.hpp>
 
@@ -63,7 +64,6 @@ struct state {
   bool tried_shader = false;
   ID3D11ComputeShader *prepare = nullptr;
   ID3D11Buffer *cb = nullptr;
-  ID3DDeviceContextState *our_state = nullptr;
   void *context = nullptr;
   bool ctx_auto_exposure = false;
   bool ctx_game_mv = false;
@@ -177,19 +177,9 @@ bool ensure_shared(ID3D11Device *dev, std::string &error) {
     return g.prepare != nullptr;
   }
   g.tried_shader = true;
-  ID3D11Device1 *dev1 = nullptr;
-  if (FAILED(dev->QueryInterface(__uuidof(ID3D11Device1), reinterpret_cast<void **>(&dev1)))) {
-    error = "ID3D11Device1 indisponible";
-  } else {
-    const D3D_FEATURE_LEVEL level = dev->GetFeatureLevel();
-    if (FAILED(dev1->CreateDeviceContextState(0, &level, 1, D3D11_SDK_VERSION, __uuidof(ID3D11Device), nullptr,
-                                              &g.our_state)))
-      error = "CreateDeviceContextState en échec";
-    dev1->Release();
-  }
   D3D11_BUFFER_DESC cb{sizeof(push_constants), D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE,
                        0, 0};
-  if (g.our_state != nullptr && SUCCEEDED(dev->CreateBuffer(&cb, nullptr, &g.cb)))
+  if (SUCCEEDED(dev->CreateBuffer(&cb, nullptr, &g.cb)))
     g.prepare = d3d::compile_cs(dev, kPrepareSource, "main", error);
   if (g.prepare == nullptr)
     reshade::log::message(reshade::log::level::error, ("AK-FSR: backend DX11 : " + error).c_str());
@@ -314,9 +304,13 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
       imm1->End(q.stamp[0]);
     }
 
-    // État D3D11 du jeu mis de côté : FidelityFX lie librement ses ressources.
-    ID3DDeviceContextState *game_state = nullptr;
-    imm1->SwapDeviceContextState(g.our_state, &game_state);
+    // État compute du jeu sauvegardé puis restauré : FidelityFX lie librement l'étage compute.
+    // (SwapDeviceContextState faussait l'état vu par les passes suivantes du jeu sous DXVK, constaté en jeu.)
+    std::optional<d3d::full_cs_state_guard> guard(std::in_place, imm1);
+    ID3D11ShaderResourceView *srv_none[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
+    ID3D11UnorderedAccessView *uav_none[D3D11_PS_CS_UAV_REGISTER_COUNT] = {};
+    imm1->CSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, srv_none);
+    imm1->CSSetUnorderedAccessViews(0, D3D11_PS_CS_UAV_REGISTER_COUNT, uav_none, nullptr);
 
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (SUCCEEDED(imm1->Map(g.cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
@@ -358,8 +352,7 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
     rc = b.dispatch(g.context, &d);
     if (g.queries_ok) imm1->End(q.stamp[2]);
 
-    imm1->SwapDeviceContextState(game_state, nullptr);
-    if (game_state != nullptr) game_state->Release();
+    guard.reset();
     if (rc == 0) {
       imm1->CopySubresourceRegion(in.output != nullptr ? in.output : in.color, 0, 0, 0, 0, g.output, 0, nullptr);
     } else {
@@ -393,7 +386,6 @@ void shutdown() {
   release_textures();
   release(g.prepare);
   release(g.cb);
-  release(g.our_state);
   g = {};
 }
 

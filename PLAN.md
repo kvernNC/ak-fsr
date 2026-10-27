@@ -80,7 +80,7 @@ Licence MIT avec addendum : toute réutilisation de code doit citer les auteurs 
 1. **FSR 3 avec le backend DX11 natif de FidelityFX** (`FidelityFX/host/backends/dx11/ffx_dx11.h`,
    en-têtes © AMD, MIT ; Luma le lie statiquement via `ffx_backend_dx11_x64.lib`) : ni Vulkan,
    ni copies DX11 ↔ Vulkan, ni `FlushRenderingCommands`.
-2. **Insertion à la place de la passe finale du SMAA du jeu** (AA du jeu sur « Élevé » requis) :
+2. **Insertion à la place de la passe finale du SMAA du jeu** (AA du jeu sur « On » requis) :
    - `SMAAEdgeDetection` = PS `0x067FF80F` → sautée ; sa SRV1 est la profondeur (à capturer).
    - `SMAABlendingWeightCalculation` = PS `0x2F55F98E` → sautée.
    - `SMAANeighborhoodBlending` = CS `0x42C0137E` → remplacée par FSR ;

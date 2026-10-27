@@ -64,7 +64,7 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 
 ## 4. M8.1 — FSR à la place du SMAA du jeu
 
-- Prérequis : **AA du jeu sur « Élevé »** (SMAA) dans les options graphiques.
+- Prérequis : **AA du jeu sur « On »** (SMAA) dans les options graphiques.
 - Option : case **« Insertion au SMAA du jeu (M8.1…) »** ; `ReShade.ini` : `SmaaInsertion=1`.
 - Principe : `SMAAEdgeDetection` (PS `0x067FF80F`) et `SMAABlendingWeightCalculation` (PS `0x2F55F98E`)
   sont sautées ; FSR remplace `SMAANeighborhoodBlending` (CS `0x42C0137E`, t0 → u0). Sans SMAA dans la
@@ -91,7 +91,7 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - Option : **« Backend FSR : DX11 natif (M8.2) »** ; `ReShade.ini` : `Backend=1` (0 = Vulkan, défaut).
 - Principe : FSR 3 (FidelityFX, backend DX11 précompilé par Luma) appelé directement sur le contexte D3D11
   du jeu : ni interop Vulkan, ni copies vers Vulkan, ni `FlushRenderingCommands`. L'état D3D11 du jeu est
-  mis de côté pendant le travail (`SwapDeviceContextState`).
+  sauvegardé puis restauré (étage compute) autour du travail.
 - Observer : onglet « Version utilisée : 3.1 (backend DX11 natif) », « Backend DX11 : actif | CPU x ms ».
   Image équivalente au backend Vulkan (comparer à l'arrêt et en mouvement, avec et sans jitter).
   Comparer au même endroit, caméra immobile :

@@ -484,7 +484,7 @@ void on_overlay(reshade::api::effect_runtime *) {
       ImGui::EndCombo();
     }
   }
-  fsr_changed |= ImGui::Checkbox("Insertion au SMAA du jeu (M8.1, AA du jeu sur Élevé)", &fsr_settings.smaa_insertion);
+  fsr_changed |= ImGui::Checkbox("Insertion au SMAA du jeu (M8.1, AA du jeu sur On)", &fsr_settings.smaa_insertion);
   {
     int backend = static_cast<int>(fsr_settings.fsr_backend);
     ImGui::TextUnformatted("Backend FSR :");

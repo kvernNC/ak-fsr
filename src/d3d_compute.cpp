@@ -100,4 +100,29 @@ cs_state_guard::~cs_state_guard() {
   if (cb_ != nullptr) cb_->Release();
 }
 
+full_cs_state_guard::full_cs_state_guard(ID3D11DeviceContext *ctx) : ctx_(ctx) {
+  ctx_->CSGetShader(&shader_, instances_, &instance_count_);
+  ctx_->CSGetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, srv_);
+  ctx_->CSGetUnorderedAccessViews(0, D3D11_PS_CS_UAV_REGISTER_COUNT, uav_);
+  ctx_->CSGetConstantBuffers(0, D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, cb_);
+  ctx_->CSGetSamplers(0, D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT, samplers_);
+}
+
+full_cs_state_guard::~full_cs_state_guard() {
+  ctx_->CSSetShader(shader_, instances_, instance_count_);
+  ctx_->CSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, srv_);
+  ctx_->CSSetUnorderedAccessViews(0, D3D11_PS_CS_UAV_REGISTER_COUNT, uav_, nullptr);
+  ctx_->CSSetConstantBuffers(0, D3D11_COMMONSHADER_CONSTANT_BUFFER_API_SLOT_COUNT, cb_);
+  ctx_->CSSetSamplers(0, D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT, samplers_);
+  auto release = [](auto *p) {
+    if (p != nullptr) p->Release();
+  };
+  release(shader_);
+  for (UINT i = 0; i < instance_count_; ++i) release(instances_[i]);
+  for (auto *p : srv_) release(p);
+  for (auto *p : uav_) release(p);
+  for (auto *p : cb_) release(p);
+  for (auto *p : samplers_) release(p);
+}
+
 }  // namespace akfsr::d3d
