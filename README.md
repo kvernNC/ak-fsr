@@ -132,7 +132,7 @@ précompilés dans `src/shaders/` ; `scripts/build_shaders.sh` les régénère (
 - Coût sur Steam Deck mesuré avant M8 : environ 3,4 ms par frame (FSR 3.1 en 800p, chemin Vulkan), au-delà du
   budget visé de 2 ms ; M8.1 (SMAA récupéré) et M8.2 (DX11) doivent le réduire.
 - Les détails plus fins qu'un pixel peuvent encore sautiller en mouvement (moins avec FSR 4).
-- Journal des tests et blocages : [PROGRESS.md](PROGRESS.md).
+- Journal des tests et blocages : [PROGRESS.md](PROGRESS.md) ; procédure de test sur Steam Deck : [DECK.md](DECK.md).
 - Le détail de la conception, des passes du jeu et des pièges rencontrés est dans [PLAN.md](PLAN.md).
 
 ## Crédits et licences
