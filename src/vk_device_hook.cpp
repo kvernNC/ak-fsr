@@ -181,6 +181,7 @@ VKAPI_ATTR VkResult VKAPI_CALL hooked_create_device(VkPhysicalDevice physical, c
 }  // namespace
 
 void log_prologue() {
+  if (get_status().installed) return;  // détour posé : le prologue lu serait celui de notre saut
   HMODULE vk = GetModuleHandleW(L"winevulkan.dll");
   const char *module = "winevulkan.dll";
   if (vk == nullptr) {

@@ -13,8 +13,8 @@ procédure de test détaillée dans [TESTING.md](TESTING.md). Version de l'addon
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
 | M8.4 biais de LOD des textures | codé, à tester | `LodBias` |
 | M8.5 exposition du jeu | fonctionne (sans OptiScaler) ; intérêt qualité à juger | `GameExposure`, `ExposureMode`, `ExposureScale` |
-| M10.2 provider FSR 4 du pilote | codé, à tester (DLL AMD à fournir) | `Fsr4Driver`, `Version` |
-| M10.3 menu Version FSR (2 / 3 / 4) | codé, à tester | `Version` |
+| M10.2 provider FSR 4 du pilote | **fonctionne** (PC, FP8, sans OptiScaler) | `Fsr4Driver`, `Version` |
+| M10.3 menu Version FSR (2 / 3 / 4) | bascule 4 → 3.1 → 4 en jeu sans plantage | `Version` |
 
 Exclus comme demandé : M6, M9.
 
@@ -105,6 +105,13 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
   du jeu, FSR réduit l'énergie haute fréquence de 14 à 16 % et l'instabilité entre frames de 6 à 34 %
   (scène cinématique, écarts entre variantes FSR non significatifs).
 - M8.5 : fonctionne sans OptiScaler, luminosité inchangée (attendu) ; voir Blocages pour OptiScaler.
+- **M10.2 / M10.3 — FSR 4 sans OptiScaler** : détour de `vkCreateDevice` installé, 8 extensions ajoutées au
+  device de DXVK (dont `VK_EXT_shader_float8`, `VK_NV_cooperative_matrix2`), provider du pilote obtenu
+  (`0xF5A5CA1E81001002`, « 4.1.2 * », DLL signées du SDK 2.3), contexte créé, modèle relevé
+  `fsr4_model_v07_fp8_no_scale_prepass`, 30 shaders dont 2 réécrits pour RADV, 0 échec. Mesures (4 frames,
+  crématorium) : instabilité 0,073 (FSR 3.1 : 0,092 ; SMAA : 0,143), énergie HF 2,62 (3,20 ; 3,68) ;
+  coût GPU 0,26 ms contre 0,16–0,18 ms pour FSR 3.1 à 800×600. Ligne de lancement :
+  `radv_cooperative_matrix2_nv=true` requis (FP8).
 
 ## Points incertains à vérifier en priorité (M10.2)
 
