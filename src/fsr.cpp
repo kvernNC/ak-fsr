@@ -52,6 +52,7 @@ struct state {
   bool ctx_game_mv = false;
   bool ctx_driver = false;  // M10.2 : contexte du provider FSR 4 du pilote
   bool ctx_exposure = false;  // M8.5 : contexte utilisé avec une texture d'exposition
+  int ctx_fsr4_model = 0;     // modèle FSR 4 imposé au pilote à la création du contexte
   bool images_exposure = false;  // M8.5 : images créées pour une frame avec exposition
   std::string provider_name;     // version du contexte Vulkan courant
   uint64_t ctx_version = 0;
@@ -347,7 +348,8 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
 // FidelityFX (double free dans le pilote, constaté en jeu) : contexte recréé à chaque changement.
 bool ensure_context(const settings &s, bool exposure) {
   if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_version == s.version_id &&
-      g.ctx_game_mv == s.game_mv && g.ctx_exposure == exposure)
+      g.ctx_game_mv == s.game_mv && g.ctx_exposure == exposure &&
+      (s.version_id != fsr4::kDriverVersionId || g.ctx_fsr4_model == s.fsr4_model))
     return true;
   if (g.context != nullptr) {
     wait_idle();
@@ -387,6 +389,7 @@ bool ensure_context(const settings &s, bool exposure) {
     if (!s.fsr4_driver) {
       driver_failure = "option « FSR 4 pilote » désactivée";
     } else {
+      fsr4::set_model(static_cast<fsr4::model>(s.fsr4_model));
       rc = fsr4::create_context(&g.context, &desc.header, ctx().device, ctx().physical, ffx_get_device_proc_addr);
       if (rc == FFX_API_RETURN_OK)
         g.ctx_driver = true;
@@ -426,6 +429,7 @@ bool ensure_context(const settings &s, bool exposure) {
   g.ctx_auto_exposure = s.auto_exposure;
   g.ctx_game_mv = s.game_mv;
   g.ctx_exposure = exposure;
+  g.ctx_fsr4_model = s.fsr4_model;
   g.ctx_version = s.version_id;
   h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 

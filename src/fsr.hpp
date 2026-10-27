@@ -52,6 +52,8 @@ struct settings {
   float lod_bias = kDefaultLodBias;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
   // M10.2 : FSR 4 par le provider du pilote AMD (DLL dans ak-fsr/, détour de vkCreateDevice au lancement).
   bool fsr4_driver = false;
+  // Modèle FSR 4 imposé au pilote (fsr4::model) : 0 = choix du pilote. Recrée le contexte.
+  int fsr4_model = 0;
   // M8.5 : exposition du jeu (texture 1×1 du tonemapper) à la place de l'auto-exposition de FSR.
   bool game_exposure = false;
   int exposure_mode = 0;       // exposure::mode : tel quel, inverse, exp2, exp2(-x)

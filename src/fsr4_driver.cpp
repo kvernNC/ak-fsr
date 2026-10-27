@@ -6,7 +6,9 @@
 #include <ffx_api/vk/ffx_api_vk.h>
 
 #include <cctype>
+#include <atomic>
 #include <cstdio>
+#include <iterator>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -175,6 +177,91 @@ PFN_vkVoidFunction VKAPI_CALL driver_get_device_proc_addr(VkDevice device, const
   return f;
 }
 
+// --- GPU présenté au pilote (choix du modèle) ---------------------------------------------------------------
+std::atomic<int> g_model{0};
+PFN_vkGetPhysicalDeviceProperties g_real_props = nullptr;
+PFN_vkGetPhysicalDeviceProperties2 g_real_props2 = nullptr;
+
+struct spoof {
+  uint32_t device_id;
+  const char *name;
+};
+// Un GPU représentatif par modèle (identifiants PCI AMD) : RDNA 4, RDNA 3, RDNA 2 de bureau, Van Gogh.
+constexpr spoof kSpoofs[] = {
+    {0, nullptr},
+    {0x7550, "AMD Radeon RX 9070 XT (RADV GFX1201)"},
+    {0x744C, "AMD Radeon RX 7900 XTX (RADV NAVI31)"},
+    {0x73BF, "AMD Radeon RX 6800 XT (RADV NAVI21)"},
+    {0x163F, "AMD Custom GPU 0405 (RADV VANGOGH)"},
+};
+
+void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
+  static std::atomic<bool> logged{false};
+  if (!logged.exchange(true)) {
+    char buf[256];
+    std::snprintf(buf, sizeof(buf), "%s lu par le pilote : vendeur 0x%04x, appareil 0x%04x, « %s »", call, p.vendorID,
+                  p.deviceID, p.deviceName);
+    log(reshade::log::level::info, buf);
+  }
+  const int m = g_model.load();
+  if (m <= 0 || m >= static_cast<int>(std::size(kSpoofs)) || p.vendorID != 0x1002) return;
+  p.deviceID = kSpoofs[m].device_id;
+  std::snprintf(p.deviceName, sizeof(p.deviceName), "%s", kSpoofs[m].name);
+}
+
+VKAPI_ATTR void VKAPI_CALL hooked_props(VkPhysicalDevice physical, VkPhysicalDeviceProperties *p) {
+  g_real_props(physical, p);
+  apply_spoof(*p, "vkGetPhysicalDeviceProperties");
+}
+
+VKAPI_ATTR void VKAPI_CALL hooked_props2(VkPhysicalDevice physical, VkPhysicalDeviceProperties2 *p) {
+  g_real_props2(physical, p);
+  static std::atomic<bool> logged{false};
+  if (!logged.exchange(true)) {
+    std::string chain;
+    for (auto *s = static_cast<VkBaseOutStructure *>(p->pNext); s != nullptr; s = s->pNext)
+      chain += " " + std::to_string(static_cast<int>(s->sType));
+    log(reshade::log::level::info, "vkGetPhysicalDeviceProperties2 : structures demandées :" + (chain.empty() ? std::string(" aucune") : chain));
+  }
+  apply_spoof(p->properties, "vkGetPhysicalDeviceProperties2");
+}
+
+// Remplace dans la table d'imports de `module` les fonctions de vulkan-1.dll nommées.
+int patch_imports(HMODULE module) {
+  auto *base = reinterpret_cast<uint8_t *>(module);
+  const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+  const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS64 *>(base + dos->e_lfanew);
+  const auto &dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+  if (dir.VirtualAddress == 0) return 0;
+  int patched = 0;
+  for (auto *imp = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR *>(base + dir.VirtualAddress); imp->Name != 0; ++imp) {
+    if (_stricmp(reinterpret_cast<const char *>(base + imp->Name), "vulkan-1.dll") != 0) continue;
+    auto *names = reinterpret_cast<IMAGE_THUNK_DATA64 *>(base + imp->OriginalFirstThunk);
+    auto *slots = reinterpret_cast<IMAGE_THUNK_DATA64 *>(base + imp->FirstThunk);
+    for (; names->u1.AddressOfData != 0; ++names, ++slots) {
+      if (IMAGE_SNAP_BY_ORDINAL64(names->u1.Ordinal)) continue;
+      const char *name = reinterpret_cast<const char *>(
+          reinterpret_cast<IMAGE_IMPORT_BY_NAME *>(base + names->u1.AddressOfData)->Name);
+      void *replacement = nullptr;
+      if (std::strcmp(name, "vkGetPhysicalDeviceProperties") == 0) {
+        g_real_props = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(slots->u1.Function);
+        replacement = reinterpret_cast<void *>(&hooked_props);
+      } else if (std::strcmp(name, "vkGetPhysicalDeviceProperties2") == 0) {
+        g_real_props2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(slots->u1.Function);
+        replacement = reinterpret_cast<void *>(&hooked_props2);
+      }
+      if (replacement == nullptr) continue;
+      DWORD old = 0;
+      if (VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), PAGE_READWRITE, &old)) {
+        slots->u1.Function = reinterpret_cast<ULONGLONG>(replacement);
+        VirtualProtect(&slots->u1.Function, sizeof(slots->u1.Function), old, &old);
+        ++patched;
+      }
+    }
+  }
+  return patched;
+}
+
 bool fail(const std::string &why) {
   std::lock_guard lock(g_mutex);
   g_info.ok = false;
@@ -208,6 +295,11 @@ bool load() {
   if (driver == nullptr)
     return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr\\ (erreur " + std::to_string(GetLastError()) +
                 ")");
+  {
+    const int patched = patch_imports(driver);
+    log(patched == 2 ? reshade::log::level::info : reshade::log::level::warning,
+        "interception de l'identification du GPU : " + std::to_string(patched) + "/2 import(s)");
+  }
   auto update = reinterpret_cast<update_provider_ex_fn>(GetProcAddress(driver, "UpdateFfxApiProviderEx"));
   if (update == nullptr) return fail("export UpdateFfxApiProviderEx absent de amdvkffx64.dll");
 
@@ -273,6 +365,15 @@ ffxReturnCode_t dispatch(ffxContext *context, const ffxDispatchDescHeader *desc)
 
 ffxReturnCode_t query(ffxContext *context, ffxQueryDescHeader *desc) {
   return g_provider.query != nullptr ? g_provider.query(context, desc) : FFX_API_RETURN_NO_PROVIDER;
+}
+
+void set_model(model m) {
+  const int v = static_cast<int>(m);
+  if (g_model.exchange(v) != v && v != 0) {
+    static const char *names[] = {"auto", "FP8", "INT8", "INT8-2", "INT8 Lite"};
+    log(reshade::log::level::info, std::string("modèle imposé : ") + names[v] + " (GPU présenté : " +
+                                       kSpoofs[v].name + ")");
+  }
 }
 
 std::string expected_model(const char *device_name) {

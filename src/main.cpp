@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <iterator>
 #include <utility>
 
 #include "frame_dump.hpp"
@@ -108,6 +109,15 @@ void toggle_key_row() {
   }
 }
 
+
+// Modèle FSR 4 imposé au pilote (Auto = choix du pilote d'après le GPU).
+bool fsr4_model_combo(akfsr::fsr::settings &s) {
+  static const char *models[] = {"Auto (choix du pilote)", "FP8 (RDNA 4)", "INT8 (RDNA 3)", "INT8-2 (RDNA 2)",
+                                 "INT8 Lite (Steam Deck)"};
+  ImGui::SetNextItemWidth(220);
+  return ImGui::Combo("Modèle FSR 4", &s.fsr4_model, models, static_cast<int>(std::size(models)));
+}
+
 #if !AKFSR_DEV_TOOLS
 // Version publiée : un seul choix, l'AA utilisé ; le reste suit les réglages validés (voir fsr.hpp).
 void on_overlay(reshade::api::effect_runtime *) {
@@ -136,9 +146,11 @@ void on_overlay(reshade::api::effect_runtime *) {
   }
   if (!fsr4_possible)
     ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr\\ ou pilote incompatible (voir README)");
-  else if (choice == 2)
-    ImGui::Text("Modèle FSR 4 (choisi par le pilote) : %s",
-                !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
+  else if (choice == 2) {
+    if (fsr4_model_combo(s)) akfsr::insertion::set_fsr_settings(s);
+    ImGui::SameLine();
+    ImGui::TextDisabled("en cours : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
+  }
   if (!info.fsr4_status.empty())
     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 indisponible, repli sur FSR 3.1 : %s",
                        info.fsr4_status.c_str());
@@ -198,6 +210,7 @@ void on_overlay(reshade::api::effect_runtime *) {
     }
   }
   fsr_changed |= ImGui::Checkbox("FSR 4 du pilote AMD (au prochain lancement)", &fsr_settings.fsr4_driver);
+  if (fsr_settings.version_id == akfsr::fsr4::kDriverVersionId) fsr_changed |= fsr4_model_combo(fsr_settings);
   fsr_changed |= ImGui::Checkbox("Remplacer le SMAA du jeu (AA du jeu sur On)", &fsr_settings.smaa_insertion);
   {
     int backend = static_cast<int>(fsr_settings.fsr_backend);

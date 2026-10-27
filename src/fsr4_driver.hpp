@@ -28,6 +28,12 @@ ffxReturnCode_t destroy_context(ffxContext *context);
 ffxReturnCode_t dispatch(ffxContext *context, const ffxDispatchDescHeader *desc);
 ffxReturnCode_t query(ffxContext *context, ffxQueryDescHeader *desc);
 
+// Modèle imposé : le pilote choisit son modèle d'après le GPU qu'il lit par vkGetPhysicalDeviceProperties(2)
+// (importées de vulkan-1.dll) ; ces appels sont interceptés dans sa table d'imports pour lui présenter un GPU
+// représentatif du modèle voulu. À régler avant create_context.
+enum class model : int { automatic = 0, fp8 = 1, int8 = 2, int8_navi2 = 3, lite = 4 };
+void set_model(model m);
+
 // Modèle attendu d'après le nom du GPU (RADV : « … (RADV GFX1201) »), logique d'AMD décrite au §8.1.
 std::string expected_model(const char *device_name);
 
