@@ -51,6 +51,7 @@ struct state {
   bool ctx_auto_exposure = false;
   bool ctx_game_mv = false;
   bool ctx_driver = false;  // M10.2 : contexte du provider FSR 4 du pilote
+  bool ctx_exposure = false;  // M8.5 : contexte utilisé avec une texture d'exposition
   uint64_t ctx_version = 0;
   bool versions_queried = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
@@ -342,9 +343,11 @@ bool ensure_exposure_image() {
 }
 
 // Contexte FFX : recréé si l'auto-exposition ou la version demandée changent.
-bool ensure_context(const settings &s) {
+// `exposure` : une texture d'exposition sera fournie. Passer d'avec à sans dans un même contexte fait planter
+// FidelityFX (double free dans le pilote, constaté en jeu) : contexte recréé à chaque changement.
+bool ensure_context(const settings &s, bool exposure) {
   if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_version == s.version_id &&
-      g.ctx_game_mv == s.game_mv)
+      g.ctx_game_mv == s.game_mv && g.ctx_exposure == exposure)
     return true;
   if (g.context != nullptr) {
     wait_idle();
@@ -422,6 +425,7 @@ bool ensure_context(const settings &s) {
   }
   g.ctx_auto_exposure = s.auto_exposure;
   g.ctx_game_mv = s.game_mv;
+  g.ctx_exposure = exposure;
   g.ctx_version = s.version_id;
   h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 
@@ -658,10 +662,11 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
 
   if (!ready()) return false;
   if (!load_dll() || !create_pipeline()) return false;
-  if (!ensure_images(desc.Format, desc.Width, desc.Height) || !ensure_context(s)) return false;
-  compute_params(in, s, g.width, g.height, p);
+  if (!ensure_images(desc.Format, desc.Width, desc.Height)) return false;
   // Après ensure_images, qui détruit les images de la frame quand il les recrée.
   const bool use_exposure = in.exposure != nullptr && ensure_exposure_image();
+  if (!ensure_context(s, use_exposure)) return false;
+  compute_params(in, s, g.width, g.height, p);
   const double t0 = p.start_ms;
   const push_constants &pc = p.pc;
   const bool objects = p.objects;

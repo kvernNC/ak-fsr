@@ -67,6 +67,7 @@ struct state {
   void *context = nullptr;
   bool ctx_auto_exposure = false;
   bool ctx_game_mv = false;
+  bool ctx_exposure = false;  // M8.5 : voir fsr.cpp, ensure_context
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
   UINT width = 0, height = 0;
   ID3D11Texture2D *depth = nullptr, *motion = nullptr, *output = nullptr;
@@ -232,8 +233,10 @@ bool ensure_textures(ID3D11Device *dev, const D3D11_TEXTURE2D_DESC &color, std::
   return true;
 }
 
-bool ensure_context(ID3D11Device *dev, const settings &s, std::string &error) {
-  if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_game_mv == s.game_mv) return true;
+bool ensure_context(ID3D11Device *dev, const settings &s, bool exposure, std::string &error) {
+  if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_game_mv == s.game_mv &&
+      g.ctx_exposure == exposure)
+    return true;
   destroy_context();
   akfsr_dx11_create_desc desc{};
   desc.version = AKFSR_DX11_API_VERSION;
@@ -251,6 +254,7 @@ bool ensure_context(ID3D11Device *dev, const settings &s, std::string &error) {
   }
   g.ctx_auto_exposure = s.auto_exposure;
   g.ctx_game_mv = s.game_mv;
+  g.ctx_exposure = exposure;
   char buf[160];
   std::snprintf(buf, sizeof(buf), "AK-FSR: backend DX11 : contexte FSR 3 créé : %ux%u (AA natif), format DXGI %d",
                 g.width, g.height, static_cast<int>(g.format));
@@ -282,7 +286,7 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
   ID3D11DeviceContext1 *imm1 = nullptr;
   if (imm != nullptr) imm->QueryInterface(__uuidof(ID3D11DeviceContext1), reinterpret_cast<void **>(&imm1));
   bool ok = imm1 != nullptr && load_bridge(error) && ensure_shared(dev, error) && ensure_textures(dev, color, error) &&
-            ensure_context(dev, s, error);
+            ensure_context(dev, s, in.exposure != nullptr, error);
   if (imm1 == nullptr && error.empty()) error = "ID3D11DeviceContext1 indisponible";
 
   ID3D11ShaderResourceView *depth_src = nullptr, *velocity_src = nullptr;

@@ -247,7 +247,8 @@ std::string build_report() {
   res("R16G16F effacée", r.cleared_rg16);
   res("exposition (tonemap)", r.exposure);
   add("[M8.5] exposition : slot t%d, GameExposure=%d mode %d échelle %.2f : %s", r.exposure_slot,
-      st.game_exposure ? 1 : 0, st.exposure_mode, st.exposure_scale, akfsr::exposure::status().c_str());
+      st.game_exposure ? 1 : 0, st.exposure_mode, st.exposure_scale,
+      st.game_exposure ? akfsr::exposure::status().c_str() : "option coupée");
   add("[ressource] R16G16F effacée == RT4 : %s", r.cleared_rg16.handle != 0 && r.cleared_rg16.handle == r.velocity_objects.handle ? "oui" : "non");
   const char *smaa[] = {"option coupée", "FSR remplace le SMAA", "repli 0xB2A276FD", "désarmée"};
   add("[M8.1] insertion au SMAA : %s, %llu frames", smaa[static_cast<int>(r.smaa_insertion)],
@@ -263,7 +264,7 @@ std::string build_report() {
   add("[DX11] %s | CPU %.3f ms | GPU préparation %.3f, FSR %.3f, copie %.3f, total %.3f ms",
       info.dx11_status.empty() ? "non lancé" : info.dx11_status.c_str(), info.dx11_cpu_ms, gt.prepare_ms, gt.fsr_ms,
       gt.copy_ms, gt.prepare_ms + gt.fsr_ms + gt.copy_ms);
-  add("[M7.2] hautes lumières : %s", akfsr::highlights::status().c_str());
+  add("[M7.2] hautes lumières : %s", st.highlights ? akfsr::highlights::status().c_str() : "option coupée");
   const auto lb = akfsr::lod_bias::get_stats();
   add("[M8.4] biais de LOD en vigueur %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified, lb.skipped);
   const auto hook = akfsr::vk_device_hook::get_status();
