@@ -32,7 +32,6 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M9 : upscaling (rendu < natif) | `ScreenPercentage` du jeu cassé sur PC (testé) : voie simple fermée | — |
 | M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | M10.2–M10.3 fonctionnent (FP8) | fonctionne : INT8, 47 fps |
 | M11 : FSR 4 Lite par la DLL DX12 | à faire | à faire |
-| M12 : FSR 4 une frame sur deux | à faire | à faire |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
 budget visé de 2 ms. Détail du coût (préparation / FSR / copies / flush DXVK) : à relever sur Deck.
@@ -200,13 +199,6 @@ Ne pas passer au suivant sans validation.
   textures et barrières partagées avec DXVK) ; (2) notre propre `amdxc64.dll`, écrit d'après les faits
   d'interface ; (3) FSR 4 par `amdxcffx64.dll` sur ce device. Critère : Lite relevé sur le Deck, coût ≤ FSR 4 INT8
   actuel, aucun plantage. Lourd et incertain (pont DX11↔DX12 jugé instable sous Proton).
-
-- **M12 — FSR 4 une frame sur deux (piste « lossy »)** : idée publique de fsr4-shader-performance-overrides
-  (zgauthier2000, GPL-2.0, FSR 4.1.1 DX12 via `VKD3D_SHADER_OVERRIDE` : non transposable tel quel, aucun code repris) :
-  le réseau ne tourne qu'une frame sur deux, son résultat est reprojeté avec le mouvement entre-temps ; environ
-  30 % de gain sur le Deck selon leurs mesures, qualité proche du Lite. Pour AK-FSR : dispatch FSR 4 sur les
-  frames paires, reprojection de la dernière sortie (nos vecteurs) sur les impaires, vecteurs et pas de temps
-  cumulés sur deux frames pour l'historique de FSR 4. Critère : FSR 4 ≤ 5 ms sur le Deck sans traînées visibles.
 
 ## 8. FSR 4 (notes)
 
