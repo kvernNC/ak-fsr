@@ -319,6 +319,7 @@ void next_test_profile() {
 //   toggle            touche on/off
 //   shaders           active l'explorateur de PS et écrit la liste de la frame dans ak-fsr-shaders.txt
 //   hide <hash> / show <hash>|all  masque / rétablit les draws d'un PS (hash hexadécimal, 0x facultatif)
+//   capture           capture complète d'une frame dans ak-fsr-dumps/ (comme F10)
 //   look <dx> <dy> <frames>  déplace la souris de (dx, dy) à chaque frame pendant <frames> frames (caméra)
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
@@ -412,6 +413,8 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
       else
         akfsr::explorer::set_hidden(hash, cmd == "hide");
     }
+  } else if (cmd == "capture") {
+    akfsr::dump::request_capture();
   } else if (cmd == "look") {
     int dx = 0, dy = 0, frames = 0;
     if (sscanf_s(arg.c_str(), "%d %d %d", &dx, &dy, &frames) == 3 && frames > 0) {

@@ -7,7 +7,7 @@ procédure de test détaillée dans [TESTING.md](TESTING.md). Version de l'addon
 |---|---|---|
 | M7.1 touche on/off | codé, à tester | `ToggleKey` |
 | M7.2 hautes lumières hors FSR | codé, à tester | `Highlights`, `HighlightThreshold` |
-| M7.3 RCAS après tonemap, pluie | bloqué (documenté) | — |
+| M7.3 RCAS après tonemap, pluie | bloqué : pluie non identifiée (voir Blocages) | — |
 | M8.1 insertion au SMAA du jeu | codé, à tester | `SmaaInsertion` |
 | M8.2 backend FSR 3 DX11 natif | codé, à tester (DLL séparée) | `Backend=1` |
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
@@ -79,8 +79,15 @@ Exclus comme demandé : M6, M9.
   après le tonemap (variante sans grain du mod DLAA) demande d'agir *après* le dispatch du tonemapper ;
   ReShade n'a pas d'événement « après dispatch », il faudrait remplacer le tonemapper ou s'accrocher à la
   passe suivante. Non fait ; le gain par rapport au RCAS intégré est faible.
-- **M7.3 — Pluie après l'AA** : les draws de pluie ne sont pas identifiés (aucune capture sous la pluie) ;
-  l'explorateur de pixel shaders de l'onglet sert à les trouver en jeu (voir TESTING.md).
+- **M7.3 — Pluie après l'AA** : non identifiée. Recherche du 27/10 sous la pluie (3 vues, commandes
+  `shaders` / `compare` / `hide`, captures PNG analysées) : la pluie ne disparaît en masquant aucun des PS des
+  draws classiques (229, 127 puis 153 PS selon la vue), ni les 233 draws au PS inconnu (passes de profondeur),
+  ni aucun des 32 compute shaders ; aucun draw indirect ni de contexte différé dans ces frames. Masquer un PS
+  pendant 0,5 s ne change rien non plus. Identifiés en chemin : `0xB0C63612` marqueur d'interface (« 553m »),
+  `0xFFA2C446` / `0x22EE72EC` / `0x5913742D` bâtiments, `0xBBA4C1CE` personnages, `0x702A1162` (contours,
+  AO/réflexions ?), `0x0E6435F4` / `0x2B46745A` bloom, `0x33566787` éclairage du sol. La pluie, très fine à
+  800×600, est difficile à mesurer sur une image. Suite : commande `capture` (frame complète, F10 ne passe pas à
+  distance) sous la pluie dans la rue, analyse hors ligne des draws et de leurs cibles.
   Il faut une capture F10 sous la pluie, mode Off, pour trouver leurs PS/VS et savoir s'ils sont dessinés
   avant `0xB2A276FD` (il faudrait alors les sauter puis les rejouer après FSR) ou après (rien à faire).
 - **glslang indisponible** : nouvelles passes en HLSL compilé à l'exécution ; `shaders/fsr_prepare.comp`
@@ -112,6 +119,8 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
   crématorium) : instabilité 0,073 (FSR 3.1 : 0,092 ; SMAA : 0,143), énergie HF 2,62 (3,20 ; 3,68) ;
   coût GPU 0,26 ms contre 0,16–0,18 ms pour FSR 3.1 à 800×600. Ligne de lancement :
   `radv_cooperative_matrix2_nv=true` requis (FP8).
+- En mouvement (rotation simulée par `look`, rafales de 8 frames, zones voisines) : FSR 4 énergie HF 4,28 /
+  scintillement 8,3, FSR 3.1 5,86 / 11,3.
 
 ## Points incertains à vérifier en priorité (M10.2)
 
