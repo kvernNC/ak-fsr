@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include "dxvk_interop.hpp"
+#include "exposure.hpp"
 #include "fsr_dx11.hpp"
 #include "highlights.hpp"
 #include "jitter.hpp"
@@ -26,6 +27,7 @@ fsr::settings g_fsr_settings;
 void on_destroy_device(device *) {
   highlights::shutdown();
   fsr::dx11::shutdown();
+  exposure::shutdown();
   vk::shutdown();
 }
 
@@ -51,6 +53,9 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::set_config_value(nullptr, kSection, "LodBias", s.lod_bias);
   reshade::set_config_value(nullptr, kSection, "Fsr4Driver", s.fsr4_driver);
+  reshade::set_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
+  reshade::set_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
+  reshade::set_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
 }
 
@@ -77,6 +82,9 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::get_config_value(nullptr, kSection, "LodBias", s.lod_bias);
   reshade::get_config_value(nullptr, kSection, "Fsr4Driver", s.fsr4_driver);
+  reshade::get_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
+  reshade::get_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
+  reshade::get_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
   lod_bias::configure(s.lod_bias, g_mode.load() == mode::fsr);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
@@ -130,6 +138,10 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     const fsr::settings s = get_fsr_settings();
     auto *native = reinterpret_cast<ID3D11Device *>(dev->get_native());
     auto *imm = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
+    if (s.game_exposure)
+      in.exposure = exposure::prepare(native, imm,
+                                      reinterpret_cast<ID3D11Resource *>(passes::get_report().exposure.handle),
+                                      static_cast<exposure::mode>(s.exposure_mode), s.exposure_scale);
     const bool split = s.highlights && highlights::extract(native, imm, color, s.highlight_threshold);
     const bool ok = fsr::run(in, s);  // les échecs sont journalisés par fsr
     // Aussi après un échec : la couleur d'entrée retrouve ses hautes lumières.

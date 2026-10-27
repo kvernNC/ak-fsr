@@ -42,12 +42,17 @@ struct settings {
   float lod_bias = 0.0f;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
   // M10.2 : FSR 4 par le provider du pilote AMD (DLL dans ak-fsr/, détour de vkCreateDevice au lancement).
   bool fsr4_driver = false;
+  // M8.5 : exposition du jeu (texture 1×1 du tonemapper) à la place de l'auto-exposition de FSR.
+  bool game_exposure = false;
+  int exposure_mode = 0;       // exposure::mode : tel quel, inverse, exp2, exp2(-x)
+  float exposure_scale = 1.0f;
 };
 
 struct frame_inputs {
   ID3D11Resource *color = nullptr;  // HDR r11g11b10, réécrite avec le résultat
   ID3D11Resource *depth = nullptr;  // D32_FLOAT_S8X24 (typeless)
   ID3D11Resource *velocity = nullptr;  // RT4 du G-buffer (r16g16_float, UV préc. - UV cour., jitterée)
+  ID3D11Resource *exposure = nullptr;  // M8.5 : R32F 1×1 préparée (nullptr : auto-exposition / aucune)
   ID3D11Resource *output = nullptr;    // destination du résultat (nullptr : `color`) ; même format et taille
   view_data view{};                 // CB View c0..c21 (voir kViewFloats)
 };

@@ -74,6 +74,8 @@ extern "C" __declspec(dllexport) int akfsrDx11Dispatch(void *context, const akfs
   d.depth = resource(desc->depth, L"AK-FSR profondeur", FFX_RESOURCE_STATE_COMPUTE_READ);
   d.motionVectors = resource(desc->motion, L"AK-FSR vecteurs", FFX_RESOURCE_STATE_COMPUTE_READ);
   d.output = resource(desc->output, L"AK-FSR sortie", FFX_RESOURCE_STATE_UNORDERED_ACCESS);
+  if (desc->exposure != nullptr)
+    d.exposure = resource(desc->exposure, L"AK-FSR exposition", FFX_RESOURCE_STATE_COMPUTE_READ);
   d.jitterOffset = {desc->jitter_x, desc->jitter_y};
   d.motionVectorScale = {desc->mv_scale_x, desc->mv_scale_y};
   const uint32_t w = static_cast<uint32_t>(d.output.description.width);

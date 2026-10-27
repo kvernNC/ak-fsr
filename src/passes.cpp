@@ -251,6 +251,25 @@ bool replace_smaa(command_list *cmd, device *dev) {
   return false;  // SMAA avec des poids périmés pendant une frame
 }
 
+// M8.5 : première SRV 1×1 du tonemapper = exposition du jeu (adaptation de l'œil).
+void note_exposure(device *dev) {
+  for (int slot = 0; slot < static_cast<int>(g_cs.srv.size()); ++slot) {
+    const auto res = resolve_view(dev, g_cs.srv[slot]);
+    if (res.desc.type != resource_type::texture_2d || res.desc.texture.width != 1 || res.desc.texture.height != 1)
+      continue;
+    std::lock_guard lock(g_report_mutex);
+    if (g_report.exposure.handle != res.handle) {
+      char buf[160];
+      std::snprintf(buf, sizeof(buf), "AK-FSR: tonemap 0x%08X : texture 1x1 %s en t%d (exposition du jeu ?)", g_cs.hash,
+                    dump::format_string(res.desc.texture.format).c_str(), slot);
+      reshade::log::message(reshade::log::level::info, buf);
+    }
+    g_report.exposure = res;
+    g_report.exposure_slot = slot;
+    return;
+  }
+}
+
 bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   if (!is_immediate(cmd) || g_cs.hash == 0) return false;
   device *dev = cmd->get_device();
@@ -295,6 +314,7 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   } else if (std::find(kTonemapCs.begin(), kTonemapCs.end(), g_cs.hash) != kTonemapCs.end()) {
     g_current.tonemap = true;
     g_current.tonemap_hash = g_cs.hash;
+    note_exposure(dev);
   }
   return false;
 }
@@ -346,7 +366,7 @@ bool on_clear_rtv(command_list *cmd, resource_view rtv, const float[4], uint32_t
 void on_destroy_resource(device *, resource res) {
   std::lock_guard lock(g_report_mutex);
   for (auto *r : {&g_report.velocity_objects, &g_report.velocity_combined, &g_report.depth, &g_report.scene_color,
-                  &g_report.insertion_depth, &g_report.cleared_rg16}) {
+                  &g_report.insertion_depth, &g_report.cleared_rg16, &g_report.exposure}) {
     if (r->handle == res.handle) *r = {};
   }
 }

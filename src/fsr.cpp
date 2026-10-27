@@ -55,7 +55,7 @@ struct state {
   bool versions_queried = false;
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
   uint32_t width = 0, height = 0;
-  image color_in, color_out, depth_src, velocity_src, depth, motion;
+  image color_in, color_out, depth_src, velocity_src, depth, motion, exposure;
 } g;
 
 // Historique de la caméra, commun aux deux backends.
@@ -217,6 +217,7 @@ void destroy_frame_resources() {
   destroy_image(g.color_out);
   destroy_image(g.depth_src);
   destroy_image(g.velocity_src);
+  destroy_image(g.exposure);
   destroy_image(g.depth);
   destroy_image(g.motion);
   g.format = DXGI_FORMAT_UNKNOWN;
@@ -321,6 +322,21 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height) {
   g.format = format;
   g.width = width;
   g.height = height;
+  return true;
+}
+
+// M8.5 : image partagée 1×1 de l'exposition, créée à la première demande (jamais dans le chemin par défaut).
+bool ensure_exposure_image() {
+  if (g.exposure.handle != VK_NULL_HANDLE) return true;
+  if (!ready() || !create_shared_image(g.exposure, DXGI_FORMAT_R32_FLOAT, 1, 1, 0)) {
+    static bool logged = false;
+    if (!logged) {
+      logged = true;
+      reshade::log::message(reshade::log::level::error,
+                            ("AK-FSR: exposition du jeu : image partagée 1x1 impossible : " + vk::status()).c_str());
+    }
+    return false;
+  }
   return true;
 }
 
@@ -587,8 +603,17 @@ void compute_params(const frame_inputs &in, const settings &s, uint32_t width, u
 
 }  // namespace
 
-bool run(const frame_inputs &in, const settings &s) {
+static bool run_frame(const frame_inputs &in, const settings &s);
+
+bool run(const frame_inputs &in, const settings &requested) {
   if (in.color == nullptr || in.depth == nullptr) return false;
+  // M8.5 : exposition fournie -> pas d'auto-exposition (contexte recréé en conséquence).
+  settings s = requested;
+  if (in.exposure != nullptr) s.auto_exposure = false;
+  return run_frame(in, s);
+}
+
+static bool run_frame(const frame_inputs &in, const settings &s) {
 
   ID3D11Texture2D *color_tex = nullptr;
   if (FAILED(in.color->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&color_tex)))) return false;
@@ -634,6 +659,8 @@ bool run(const frame_inputs &in, const settings &s) {
   if (!load_dll() || !create_pipeline()) return false;
   if (!ensure_images(desc.Format, desc.Width, desc.Height) || !ensure_context(s)) return false;
   compute_params(in, s, g.width, g.height, p);
+  // Après ensure_images, qui détruit les images de la frame quand il les recrée.
+  const bool use_exposure = in.exposure != nullptr && ensure_exposure_image();
   const double t0 = p.start_ms;
   const push_constants &pc = p.pc;
   const bool objects = p.objects;
@@ -645,6 +672,7 @@ bool run(const frame_inputs &in, const settings &s) {
   imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
   imm->CopySubresourceRegion(g.depth_src.texture, 0, 0, 0, 0, in.depth, 0, nullptr);
   if (objects) imm->CopySubresourceRegion(g.velocity_src.texture, 0, 0, 0, 0, in.velocity, 0, nullptr);
+  if (use_exposure) imm->CopySubresourceRegion(g.exposure.texture, 0, 0, 0, 0, in.exposure, 0, nullptr);
   if (!flush_dxvk()) {
     g_total_timer.end(imm);
     return false;
@@ -691,6 +719,7 @@ bool run(const frame_inputs &in, const settings &s) {
   d.color = ffx_resource(g.color_in, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.depth = ffx_resource(g.depth, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.motionVectors = ffx_resource(p.game_mv ? g.velocity_src : g.motion, FFX_API_RESOURCE_STATE_COMPUTE_READ);
+  if (use_exposure) d.exposure = ffx_resource(g.exposure, FFX_API_RESOURCE_STATE_COMPUTE_READ);
   d.output = ffx_resource(g.color_out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
   d.jitterOffset = {p.jitter_px_x, p.jitter_px_y};
   d.motionVectorScale = {p.mv_scale_x, p.mv_scale_y};

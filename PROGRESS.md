@@ -12,10 +12,11 @@ procédure de test détaillée dans [TESTING.md](TESTING.md). Version de l'addon
 | M8.2 backend FSR 3 DX11 natif | codé, à tester (DLL séparée) | `Backend=1` |
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
 | M8.4 biais de LOD des textures | codé, à tester | `LodBias` |
+| M8.5 exposition du jeu | codé, à tester (contenu de la texture inconnu) | `GameExposure`, `ExposureMode`, `ExposureScale` |
 | M10.2 provider FSR 4 du pilote | codé, à tester (DLL AMD à fournir) | `Fsr4Driver`, `Version` |
 | M10.3 menu Version FSR (2 / 3 / 4) | codé, à tester | `Version` |
 
-Exclus comme demandé : M6, M9. Non demandé : M8.5 (exposition du jeu).
+Exclus comme demandé : M6, M9.
 
 ## Résumé de la session du 27/10/2026
 

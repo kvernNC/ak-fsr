@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <utility>
 
+#include "exposure.hpp"
 #include "frame_dump.hpp"
 #include "fsr4_driver.hpp"
 #include "fsr_dx11.hpp"
@@ -176,6 +177,9 @@ std::string build_report() {
   res("profondeur insertion", r.insertion_depth);
   res("RT4 vélocité objets", r.velocity_objects);
   res("R16G16F effacée", r.cleared_rg16);
+  res("exposition (tonemap)", r.exposure);
+  add("[M8.5] exposition : slot t%d, GameExposure=%d mode %d échelle %.2f : %s", r.exposure_slot,
+      st.game_exposure ? 1 : 0, st.exposure_mode, st.exposure_scale, akfsr::exposure::status().c_str());
   add("[ressource] R16G16F effacée == RT4 : %s", r.cleared_rg16.handle != 0 && r.cleared_rg16.handle == r.velocity_objects.handle ? "oui" : "non");
   const char *smaa[] = {"option coupée", "FSR remplace le SMAA", "repli 0xB2A276FD", "désarmée"};
   add("[M8.1] insertion au SMAA : %s, %llu frames", smaa[static_cast<int>(r.smaa_insertion)],
@@ -242,6 +246,7 @@ void on_overlay(reshade::api::effect_runtime *) {
   resource_row("vélocité objets (t1)", r.velocity_objects);
   resource_row("vélocité combinée (u0)", r.velocity_combined);
   resource_row("R16G16F effacée (M8.3)", r.cleared_rg16);
+  resource_row("exposition 1x1 (M8.5)", r.exposure);
   if (r.cleared_rg16.handle != 0) {
     ImGui::SameLine();
     ImGui::TextUnformatted(r.cleared_rg16.handle == r.velocity_objects.handle ? "= RT4" : "!= RT4");
@@ -350,6 +355,19 @@ void on_overlay(reshade::api::effect_runtime *) {
                                       "%.2f");
     const auto lb = akfsr::lod_bias::get_stats();
     ImGui::Text("    en vigueur : %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified, lb.skipped);
+  }
+  fsr_changed |= ImGui::Checkbox("Exposition du jeu (M8.5)", &fsr_settings.game_exposure);
+  if (fsr_settings.game_exposure) {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(140);
+    const char *modes[] = {"telle quelle", "inverse", "exp2(x)", "exp2(-x)"};
+    fsr_changed |= ImGui::Combo("##expmode", &fsr_settings.exposure_mode, modes, 4);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120);
+    fsr_changed |= ImGui::SliderFloat("échelle", &fsr_settings.exposure_scale, 0.01f, 100.0f, "%.2f",
+                                      ImGuiSliderFlags_Logarithmic);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%s)", akfsr::exposure::status().c_str());
   }
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR (M7)", &fsr_settings.highlights);
   if (fsr_settings.highlights) {

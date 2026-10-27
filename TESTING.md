@@ -184,3 +184,18 @@ fichier avec `ReShade.log`.
   voir, le masquage reste actif tant que le nœud est ouvert.
 - Me noter le ou les hash qui font disparaître la pluie, et s'ils sont « avant » ou « après insertion ».
   Faire aussi un rapport de test et une capture F10 au même moment.
+
+## 10. M8.5 — Exposition du jeu (à la place de l'auto-exposition de FSR)
+
+- Diagnostic d'abord, option coupée : ligne **« exposition 1x1 (M8.5) »** de l'onglet et log
+  `tonemap 0x…: texture 1x1 <format> en tN (exposition du jeu ?)`. Si rien n'apparaît, le tonemapper ne lit
+  pas de texture 1×1 : M8.5 est sans objet.
+- Option : case **« Exposition du jeu (M8.5) »**, interprétation (telle quelle / inverse / exp2(x) /
+  exp2(-x)) et « échelle » ; `ReShade.ini` : `GameExposure=1`, `ExposureMode=0..3`, `ExposureScale=1.0`.
+  L'auto-exposition de FFX est alors coupée d'office.
+- Observer avec la **vue de debug FSR** et en passant d'une rue sombre à une zone éclairée : la bonne
+  interprétation ne change ni la luminosité ni la netteté par rapport à l'auto-exposition, et réduit les
+  traînées des zones très sombres ou très claires. Une mauvaise donne un rendu plus flou ou fantomatique
+  (FSR croit l'image sur- ou sous-exposée). Comparer aussi les temps GPU (l'auto-exposition coûte une passe).
+- Log : `exposition du jeu : actif` ; échecs possibles : `texture 1×1 du tonemapper pas encore repérée`,
+  `SRV sur la texture d'exposition du jeu impossible`, `image partagée 1x1 impossible`.

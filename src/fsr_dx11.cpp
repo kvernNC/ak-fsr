@@ -336,6 +336,7 @@ bool run(const frame_inputs &in, const settings &s, const frame_params &p, const
     d.depth = g.depth;
     d.motion = p.game_mv ? in.velocity : g.motion;  // M8.3 : RT4 du jeu telle quelle
     d.output = g.output;
+    d.exposure = in.exposure;
     d.jitter_x = p.jitter_px_x;
     d.jitter_y = p.jitter_px_y;
     d.mv_scale_x = p.mv_scale_x;

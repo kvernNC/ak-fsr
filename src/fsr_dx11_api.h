@@ -6,7 +6,7 @@
 #include <d3d11.h>
 #include <stdint.h>
 
-#define AKFSR_DX11_API_VERSION 1u
+#define AKFSR_DX11_API_VERSION 2u  // 2 : exposition (M8.5)
 
 enum akfsr_dx11_flags : uint32_t {
   AKFSR_DX11_HDR = 1u << 0,
@@ -27,6 +27,7 @@ struct akfsr_dx11_dispatch_desc {
   ID3D11DeviceContext *context;
   ID3D11Resource *color, *depth, *motion;  // SRV : couleur HDR, profondeur R32F, vecteurs RG16F
   ID3D11Resource *output;                  // UAV, format de la couleur
+  ID3D11Resource *exposure;                // R32F 1×1 ou nullptr
   float jitter_x, jitter_y;                // pixels
   float mv_scale_x, mv_scale_y;
   float sharpness;  // 0 : RCAS désactivé
