@@ -69,7 +69,8 @@ struct history {
 
 std::mutex g_info_mutex;
 info g_info;
-d3d::gpu_timer g_total_timer;  // chemin Vulkan complet, mesuré côté D3D11
+d3d::gpu_timer g_total_timer;  // chemin Vulkan complet, mesuré côté D3D11, seulement overlay affiché
+std::atomic<double> g_overlay_seen_ms{-1e9};
 
 void set_fsr_status(const std::string &s, bool failure) {
   {
@@ -668,7 +669,7 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
 
   // 1) Entrées du jeu -> nos images partagées (copies par DXVK).
   ID3D11DeviceContext *imm = ctx().immediate;
-  g_total_timer.begin(ctx().d3d, imm);
+  if (now_ms() - g_overlay_seen_ms.load(std::memory_order_relaxed) < 1000.0) g_total_timer.begin(ctx().d3d, imm);
   imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
   imm->CopySubresourceRegion(g.depth_src.texture, 0, 0, 0, 0, in.depth, 0, nullptr);
   if (objects) imm->CopySubresourceRegion(g.velocity_src.texture, 0, 0, 0, 0, in.velocity, 0, nullptr);
@@ -765,6 +766,8 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   set_fsr_status(p.have_reproj ? "actif" : "actif (matrice non inversible : vecteurs nuls)", false);
   return true;
 }
+
+void note_overlay_visible() { g_overlay_seen_ms = now_ms(); }
 
 info get_info() {
   std::lock_guard lock(g_info_mutex);

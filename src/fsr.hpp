@@ -74,4 +74,7 @@ struct info {
 };
 info get_info();
 
+// L'overlay est affiché : active la mesure GPU complète du chemin Vulkan (inactive sinon).
+void note_overlay_visible();
+
 }  // namespace akfsr::fsr

@@ -219,6 +219,7 @@ std::string build_report() {
 }
 
 void on_overlay(reshade::api::effect_runtime *) {
+  akfsr::fsr::note_overlay_visible();
   ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " (" AKFSR_MILESTONE " : FSR AA natif)");
   ImGui::Separator();
   if (g_swapchain.valid) {
