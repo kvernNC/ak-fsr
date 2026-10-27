@@ -47,6 +47,10 @@ uintptr_t g_module_base = 0;
 std::atomic<bool> g_enabled{false};
 std::atomic<uint32_t> g_width{0}, g_height{0};
 std::atomic<uint32_t> g_phase{0};
+std::atomic<int> g_forced_phase{-1};  // diagnostic : phase figée (-1 : séquence normale)
+std::atomic<bool> g_forced_offset{false};  // diagnostic : décalage imposé (pixels)
+std::atomic<float> g_forced_x{0}, g_forced_y{0};
+std::atomic<float> g_scale{1.0f};  // diagnostic : amplitude du jitter
 constexpr uint32_t kPhaseCount = 8;  // FSR en AA natif : 8 * (sortie/rendu)^2
 std::atomic<float> g_applied_x{0}, g_applied_y{0};
 
@@ -90,8 +94,12 @@ void *detour(void *self, float half_fov_x, float half_fov_y, float mult_fov_x, f
       h == 0)
     return result;
   // Halton(2,3) centré, en pixels ; l'indice 0 de Halton vaut 0, on commence à 1.
-  const uint32_t i = g_phase.load(std::memory_order_relaxed) % kPhaseCount + 1;
-  const float px = halton(i, 2) - 0.5f, py = halton(i, 3) - 0.5f;
+  const int forced = g_forced_phase.load(std::memory_order_relaxed);
+  const uint32_t i = (forced >= 0 ? static_cast<uint32_t>(forced) : g_phase.load(std::memory_order_relaxed)) % kPhaseCount + 1;
+  const bool fo = g_forced_offset.load(std::memory_order_relaxed);
+  const float sc = g_scale.load(std::memory_order_relaxed);
+  const float px = fo ? g_forced_x.load() : (halton(i, 2) - 0.5f) * sc;
+  const float py = fo ? g_forced_y.load() : (halton(i, 3) - 0.5f) * sc;
   // clip.x += jx·w : décalage NDC ; y NDC vers le haut, y pixel vers le bas.
   m[kM20] += 2.0f * px / static_cast<float>(w);
   m[kM21] += -2.0f * py / static_cast<float>(h);
@@ -205,6 +213,19 @@ void set_render_size(uint32_t width, uint32_t height) {
 }
 
 void on_present() { g_phase.fetch_add(1, std::memory_order_relaxed); }
+
+void force_phase(int phase) {
+  g_forced_phase = phase;
+  g_forced_offset = false;
+}
+
+void set_scale(float scale) { g_scale = scale; }
+
+void force_offset(float x, float y) {
+  g_forced_x = x;
+  g_forced_y = y;
+  g_forced_offset = true;
+}
 
 void learn_main_view(float scale_x, float scale_y, float near_plane) {
   // Un appelant est « vue principale » quand sa projection correspond à celle du CB View pendant

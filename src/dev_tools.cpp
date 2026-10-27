@@ -333,6 +333,13 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
       (cmd == "jitter" ? s.jitter : s.object_velocity) = on;
       akfsr::insertion::set_fsr_settings(s);
     }
+  } else if (cmd == "phase") {  // diagnostic : jitter figé sur une phase (0..7), -1 : séquence normale
+    akfsr::jitter::force_phase(std::atoi(arg.c_str()));
+  } else if (cmd == "jitterscale") {  // diagnostic : amplitude du jitter
+    akfsr::jitter::set_scale(static_cast<float>(std::atof(arg.c_str())));
+  } else if (cmd == "offset") {  // diagnostic : jitter figé sur un décalage « x y » en pixels
+    float x = 0, y = 0;
+    if (std::sscanf(arg.c_str(), "%f %f", &x, &y) == 2) akfsr::jitter::force_offset(x, y);
   } else if (cmd == "model") {  // modèle FSR 4 imposé : 0 auto, 1 FP8, 2 INT8, 3 INT8-2, 4 Lite
     auto s = akfsr::insertion::get_fsr_settings();
     s.fsr4_model = std::clamp(std::atoi(arg.c_str()), 0, 4);
@@ -413,7 +420,9 @@ void capture_burst(reshade::api::effect_runtime *runtime) {
   if (g_burst_done >= g_burst_total) return;
   const std::string file = g_burst_total == 1 ? g_burst_name : g_burst_name + "_" + std::to_string(g_burst_done);
   const std::string result = akfsr::screenshot::capture(runtime, g_addon_dir / "ak-fsr-shots" / (file + ".png"));
-  log_fmt(reshade::log::level::info, "AK-FSR: capture %s", result.c_str());
+  const auto js = akfsr::jitter::get_status();
+  log_fmt(reshade::log::level::info, "AK-FSR: capture %s (phase %u, jitter %.3f %.3f)", result.c_str(), js.phase,
+          js.applied_x_px, js.applied_y_px);
   ++g_burst_done;
 }
 
