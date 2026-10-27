@@ -5,7 +5,9 @@
 #include <imgui.h>
 #include <reshade.hpp>
 
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <iterator>
 #include <string>
@@ -127,6 +129,7 @@ void on_init_swapchain(reshade::api::swapchain *swapchain, bool resize) {
 
 std::string write_report();
 void next_test_profile();
+void poll_command_file();
 
 // Touches utilisables sans l'overlay (prise en main à distance, petite fenêtre) : [AK-FSR] ReportKey /
 // ReportModifier et ProfileKey / ProfileModifier de ReShade.ini, codes VK (touche 0 = désactivée,
@@ -149,6 +152,7 @@ void on_reshade_present(reshade::api::effect_runtime *runtime) {
   if (runtime->is_key_pressed(kDumpFrameKey)) akfsr::dump::request_capture();
   if (hotkey_pressed(runtime, g_report_key, g_profile_key)) write_report();
   if (hotkey_pressed(runtime, g_profile_key, g_report_key)) next_test_profile();
+  poll_command_file();
   const uint32_t toggle = akfsr::insertion::get_toggle_key();
   if (toggle != 0 && runtime->is_key_pressed(toggle)) akfsr::insertion::toggle_bypass();
 }
@@ -300,6 +304,61 @@ int g_profile = 0;
 void next_test_profile() {
   g_profile = (g_profile + 1) % static_cast<int>(std::size(kTestProfiles));
   apply_test_profile(kTestProfiles[g_profile]);
+}
+
+// Pilotage sans clavier (prise en main à distance) : fichier ak-fsr-command.txt à côté de l'addon, lu
+// environ deux fois par seconde puis supprimé. Une commande par ligne :
+//   report            rapport de test
+//   profile <n>|next  profil de test n (0 = référence) ou suivant
+//   toggle            touche on/off
+void run_command(const std::string &line) {
+  std::string cmd = line, arg;
+  if (const size_t sp = line.find(' '); sp != std::string::npos) {
+    cmd = line.substr(0, sp);
+    arg = line.substr(sp + 1);
+  }
+  if (cmd == "report") {
+    write_report();
+  } else if (cmd == "profile") {
+    const int count = static_cast<int>(std::size(kTestProfiles));
+    if (arg == "next") {
+      next_test_profile();
+    } else if (!arg.empty() && std::isdigit(static_cast<unsigned char>(arg[0])) && std::atoi(arg.c_str()) < count) {
+      g_profile = std::atoi(arg.c_str());
+      apply_test_profile(kTestProfiles[g_profile]);
+    } else {
+      log_fmt(reshade::log::level::warning, "AK-FSR: commande : profil inconnu « %s » (0 à %d)", arg.c_str(), count - 1);
+    }
+  } else if (cmd == "toggle") {
+    akfsr::insertion::toggle_bypass();
+  } else if (!cmd.empty()) {
+    log_fmt(reshade::log::level::warning, "AK-FSR: commande inconnue « %s »", line.c_str());
+  }
+}
+
+void poll_command_file() {
+  static uint32_t frame = 0;
+  if (++frame % 30 != 0) return;
+  const auto path = g_addon_dir / "ak-fsr-command.txt";
+  if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+  FILE *f = nullptr;
+  if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || f == nullptr) return;
+  std::string text(4096, '\0');
+  text.resize(std::fread(text.data(), 1, text.size(), f));
+  std::fclose(f);
+  DeleteFileW(path.c_str());
+  size_t start = 0;
+  while (start < text.size()) {
+    size_t end = text.find('\n', start);
+    if (end == std::string::npos) end = text.size();
+    std::string line = text.substr(start, end - start);
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+    if (!line.empty()) {
+      log_fmt(reshade::log::level::info, "AK-FSR: commande : %s", line.c_str());
+      run_command(line);
+    }
+    start = end + 1;
+  }
 }
 
 void on_overlay(reshade::api::effect_runtime *) {
