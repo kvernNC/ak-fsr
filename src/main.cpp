@@ -417,33 +417,23 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     }
   } else if (cmd == "capture") {
     akfsr::dump::request_capture();
-  } else if (cmd == "key") {
-    const WORD vk = static_cast<WORD>(std::strtoul(arg.c_str(), nullptr, 16));
-    INPUT in[2] = {};
-    in[0].type = in[1].type = INPUT_KEYBOARD;
-    in[0].ki.wVk = in[1].ki.wVk = vk;
-    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(2, in, sizeof(INPUT));
-  } else if (cmd == "type") {
-    std::vector<INPUT> in;
-    wchar_t wide[512];
-    const int n = MultiByteToWideChar(CP_UTF8, 0, arg.c_str(), -1, wide, 512) - 1;
-    for (int i = 0; i < n; ++i)
-      for (DWORD up : {0ul, static_cast<DWORD>(KEYEVENTF_KEYUP)}) {
-        INPUT k{};
-        k.type = INPUT_KEYBOARD;
-        k.ki.wScan = wide[i];
-        k.ki.dwFlags = KEYEVENTF_UNICODE | up;
-        in.push_back(k);
-      }
-    for (DWORD up : {0ul, static_cast<DWORD>(KEYEVENTF_KEYUP)}) {
-      INPUT k{};
-      k.type = INPUT_KEYBOARD;
-      k.ki.wVk = VK_RETURN;
-      k.ki.dwFlags = up;
-      in.push_back(k);
+  } else if (cmd == "key" || cmd == "type") {
+    // Messages envoyés directement à la fenêtre du jeu : SendInput n'atteint pas la fenêtre en prise en main à
+    // distance (constaté : F10 simulé sans effet), PostMessage si.
+    const HWND hwnd = static_cast<HWND>(runtime->get_hwnd());
+    auto post_key = [&](UINT vk) {
+      const LPARAM scan = static_cast<LPARAM>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)) << 16;
+      PostMessageW(hwnd, WM_KEYDOWN, vk, scan | 1);
+      PostMessageW(hwnd, WM_KEYUP, vk, scan | 1 | (1u << 30) | (1u << 31));
+    };
+    if (cmd == "key") {
+      post_key(static_cast<UINT>(std::strtoul(arg.c_str(), nullptr, 16)));
+    } else {
+      wchar_t wide[512];
+      const int n = MultiByteToWideChar(CP_UTF8, 0, arg.c_str(), -1, wide, 512) - 1;
+      for (int i = 0; i < n; ++i) PostMessageW(hwnd, WM_CHAR, wide[i], 1);
+      post_key(VK_RETURN);
     }
-    SendInput(static_cast<UINT>(in.size()), in.data(), sizeof(INPUT));
   } else if (cmd == "look") {
     int dx = 0, dy = 0, frames = 0;
     if (sscanf_s(arg.c_str(), "%d %d %d", &dx, &dy, &frames) == 3 && frames > 0) {
