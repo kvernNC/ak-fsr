@@ -153,8 +153,9 @@ void on_overlay(reshade::api::effect_runtime *) {
     ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr\\ ou pilote incompatible (voir README)");
   else if (choice == 2) {
     if (fsr4_model_combo(s)) akfsr::insertion::set_fsr_settings(s);
-    ImGui::SameLine();
-    ImGui::TextDisabled("en cours : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
+    ImGui::Text("Modèle choisi par le pilote : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
+    if (driver.context_shaders > 0)
+      ImGui::TextDisabled("(%u shaders, empreinte 0x%08X)", driver.context_shaders, driver.context_hash);
   }
   if (!info.fsr4_status.empty())
     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 indisponible, repli sur FSR 3.1 : %s",
@@ -215,7 +216,14 @@ void on_overlay(reshade::api::effect_runtime *) {
     }
   }
   fsr_changed |= ImGui::Checkbox("FSR 4 du pilote AMD (au prochain lancement)", &fsr_settings.fsr4_driver);
-  if (fsr_settings.version_id == akfsr::fsr4::kDriverVersionId) fsr_changed |= fsr4_model_combo(fsr_settings);
+  if (fsr_settings.version_id == akfsr::fsr4::kDriverVersionId) {
+    fsr_changed |= fsr4_model_combo(fsr_settings);
+    const auto driver_info = akfsr::fsr4::get_info();
+    ImGui::SameLine();
+    ImGui::Text("choisi par le pilote : %s (%u shaders, empreinte 0x%08X)",
+                driver_info.model.empty() ? "pas encore connu" : driver_info.model.c_str(), driver_info.context_shaders,
+                driver_info.context_hash);
+  }
   fsr_changed |= ImGui::Checkbox("Remplacer le SMAA du jeu (AA du jeu sur On)", &fsr_settings.smaa_insertion);
   {
     int backend = static_cast<int>(fsr_settings.fsr_backend);
