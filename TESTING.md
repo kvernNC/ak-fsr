@@ -146,7 +146,8 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
   - `amdvkffx64.dll` du pilote Adrenalin 26.10.1 (archive extraite avec 7-Zip, §8.1 de PLAN.md) ;
   - `amd_fidelityfx_loader_dx12.dll` et `amd_fidelityfx_upscaler_dx12.dll` du FSR SDK 2.3
     (`Kits/FidelityFX/signedbin/`), **renommées** `amd_fidelityfx_loader_vk.dll` et
-    `amd_fidelityfx_upscaler_vk.dll`.
+    `amd_fidelityfx_upscaler_vk.dll` : `scripts/fetch_ffx_signed.sh` (dépôt officiel AMD, MIT, empreintes
+    vérifiées) puis `scripts/deploy.sh`, qui copie aussi `amdvkffx64.dll` depuis `Binaries/Win64/` si elle s'y trouve.
 - PC (RDNA 4, modèle FP8) : ajouter `radv_cooperative_matrix2_nv=true` à la ligne de lancement Steam
   (lu par RADV à l'initialisation, avant le chargement de l'addon).
 - Option : case **« FSR 4 pilote (M10.2, au prochain lancement) »** ; `ReShade.ini` : `Fsr4Driver=1`.
