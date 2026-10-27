@@ -17,6 +17,7 @@
 
 #include <reshade.hpp>
 
+#include "crc32.hpp"
 #include "spirv_half_image.hpp"
 
 namespace akfsr::fsr4 {
@@ -88,6 +89,9 @@ std::string model_label(std::string name) {
   for (char &c : name) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   auto has = [&](const char *s) { return name.find(s) != std::string::npos; };
   if (has("fp8")) return "FP8";
+  if (has("fsr4l-i8")) return "INT8 Lite";
+  if (has("fsr4-i8-2")) return "INT8-2";
+  if (has("fsr4-i8")) return "INT8";
   if (has("int8") && has("lite")) return "INT8 Lite";
   if (has("int8_2") || has("int82") || has("int8-2")) return "INT8-2";
   if (has("int8")) return "INT8";
@@ -119,10 +123,18 @@ void note_model(const uint32_t *code, size_t words) {
 }
 
 // Module réécrit (images float16 -> float32) ; `storage` garde les mots en vie pendant l'appel.
+std::atomic<bool> g_first_module{true};  // premier shader du contexte en cours (empreinte journalisée)
+
 const VkShaderModuleCreateInfo *patch_module(const VkShaderModuleCreateInfo *info, VkShaderModuleCreateInfo &copy,
                                              std::vector<uint32_t> &storage) {
   const size_t words = info->codeSize / 4;
   note_model(info->pCode, words);
+  if (g_first_module.exchange(false)) {
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "premier shader du contexte : %zu octets, crc32 0x%08X", info->codeSize,
+                  crc32(info->pCode, info->codeSize));
+    log(reshade::log::level::info, buf);
+  }
   std::string error;
   const auto r = spirv::promote_half_images(info->pCode, words, storage, error);
   std::lock_guard lock(g_mutex);
@@ -411,6 +423,7 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
   g_base_gdpa = get_device_proc_addr;
   g_identity_logs = 0;
   g_feature_logs = 0;
+  g_first_module = true;
   {
     std::lock_guard lock(g_mutex);
     g_info.model_seen.clear();  // nom du modèle du nouveau contexte
@@ -428,6 +441,23 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
   upscale->pNext = &backend.header;
   const ffxReturnCode_t rc = g_provider.create_context(context, upscale, &kAllocator);
   upscale->pNext = nullptr;
+  if (rc == FFX_API_RETURN_OK && g_provider.query != nullptr) {
+    // Nom du provider effectivement créé par le pilote (FSR4-i8, FSR4-i8-2, FSR4L-i8…).
+    ffxQueryGetProviderVersion q{};
+    q.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
+    if (g_provider.query(context, &q.header) == FFX_API_RETURN_OK) {
+      char buf[160];
+      std::snprintf(buf, sizeof(buf), "provider créé : « %s », id 0x%016llx", q.versionName ? q.versionName : "?",
+                    static_cast<unsigned long long>(q.versionId));
+      log(reshade::log::level::info, buf);
+      std::lock_guard lock(g_mutex);
+      if (q.versionName != nullptr) {
+        const std::string label = model_label(q.versionName);
+        if (!label.empty()) g_info.model = label;
+      }
+      g_info.created_name = q.versionName ? q.versionName : "";
+    }
+  }
   std::lock_guard lock(g_mutex);
   g_info.status = rc == FFX_API_RETURN_OK ? "contexte créé" : "création du contexte : code " + std::to_string(rc);
   return rc;
