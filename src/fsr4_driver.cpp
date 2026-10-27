@@ -124,11 +124,14 @@ void note_model(const uint32_t *code, size_t words) {
 
 // Module réécrit (images float16 -> float32) ; `storage` garde les mots en vie pendant l'appel.
 std::atomic<bool> g_first_module{true};  // premier shader du contexte en cours (empreinte journalisée)
+std::atomic<uint32_t> g_context_hash{0}, g_context_modules{0};  // empreinte de tous les shaders du contexte
 
 const VkShaderModuleCreateInfo *patch_module(const VkShaderModuleCreateInfo *info, VkShaderModuleCreateInfo &copy,
                                              std::vector<uint32_t> &storage) {
   const size_t words = info->codeSize / 4;
   note_model(info->pCode, words);
+  g_context_hash = g_context_hash.load() * 31u + crc32(info->pCode, info->codeSize);
+  g_context_modules.fetch_add(1);
   if (g_first_module.exchange(false)) {
     char buf[96];
     std::snprintf(buf, sizeof(buf), "premier shader du contexte : %zu octets, crc32 0x%08X", info->codeSize,
@@ -220,6 +223,9 @@ void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
   const int m = g_model.load();
   if (m <= 0 || m >= static_cast<int>(std::size(kSpoofs)) || p.vendorID != 0x1002) return;
   p.deviceID = kSpoofs[m].device_id;
+  // Van Gogh et Strix Point (modèle Lite) sont des GPU intégrés : type présenté en conséquence.
+  p.deviceType = m == static_cast<int>(model::lite) ? VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+                                                    : VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
   std::snprintf(p.deviceName, sizeof(p.deviceName), "%s", kSpoofs[m].name);
 }
 
@@ -424,6 +430,8 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
   g_identity_logs = 0;
   g_feature_logs = 0;
   g_first_module = true;
+  g_context_hash = 0;
+  g_context_modules = 0;
   {
     std::lock_guard lock(g_mutex);
     g_info.model_seen.clear();  // nom du modèle du nouveau contexte
@@ -441,6 +449,12 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
   upscale->pNext = &backend.header;
   const ffxReturnCode_t rc = g_provider.create_context(context, upscale, &kAllocator);
   upscale->pNext = nullptr;
+  {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "shaders créés avec le contexte : %u, empreinte globale 0x%08X",
+                  g_context_modules.load(), g_context_hash.load());
+    log(reshade::log::level::info, buf);
+  }
   if (rc == FFX_API_RETURN_OK && g_provider.query != nullptr) {
     // Nom du provider effectivement créé par le pilote (FSR4-i8, FSR4-i8-2, FSR4L-i8…).
     ffxQueryGetProviderVersion q{};
