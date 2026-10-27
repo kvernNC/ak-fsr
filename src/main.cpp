@@ -330,10 +330,11 @@ void dump_shader_list() {
   const auto path = g_addon_dir / "ak-fsr-shaders.txt";
   FILE *f = nullptr;
   if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || f == nullptr) return;
-  std::fprintf(f, "# ordre ; hash ; position ; draws ; sommets ; dont indirects ; masqué\n");
+  std::fprintf(f, "# ordre ; genre (P pixel, C compute, D contextes différés) ; hash (0 = inconnu) ; position ; draws ou "
+               "dispatches ; sommets ; dont indirects ; masqué\n");
   int i = 0;
   for (const auto &e : entries)
-    std::fprintf(f, "%3d 0x%08X %-16s %5u %9u %4u %s\n", i++, e.hash, e.after_insertion ? "après_insertion" : "avant",
+    std::fprintf(f, "%3d %c 0x%08X %-16s %5u %9u %4u %s\n", i++, e.kind, e.hash, e.after_insertion ? "après_insertion" : "avant",
                  e.draws, e.vertices, e.indirect, e.hidden ? "masqué" : "");
   std::fclose(f);
   log_fmt(reshade::log::level::info, "AK-FSR: liste des pixel shaders écrite : %zu PS", entries.size());
@@ -406,7 +407,7 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
       akfsr::explorer::clear_hidden();
     } else {
       const uint32_t hash = static_cast<uint32_t>(std::strtoul(arg.c_str(), nullptr, 16));
-      if (hash == 0)
+      if (hash == 0 && arg != "0" && arg != "00000000")
         log_fmt(reshade::log::level::warning, "AK-FSR: commande : hash invalide « %s »", arg.c_str());
       else
         akfsr::explorer::set_hidden(hash, cmd == "hide");
@@ -425,8 +426,8 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     size_t pos = 0;
     while (pos < arg.size()) {
       const size_t end = std::min(arg.find(' ', pos), arg.size());
-      if (const uint32_t hash = static_cast<uint32_t>(std::strtoul(arg.substr(pos, end - pos).c_str(), nullptr, 16)))
-        g_compare_queue.push_back(hash);
+      const std::string token = arg.substr(pos, end - pos);
+      if (!token.empty()) g_compare_queue.push_back(static_cast<uint32_t>(std::strtoul(token.c_str(), nullptr, 16)));
       pos = end + 1;
     }
   } else if (cmd == "screenshot") {

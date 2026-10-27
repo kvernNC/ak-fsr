@@ -13,11 +13,14 @@ void set_enabled(bool enabled);
 bool enabled();
 
 // Appelés par passes.cpp sur le contexte immédiat.
-bool on_draw(uint32_t ps_hash, uint32_t vertices, bool indirect = false);  // true : draw à sauter
+bool on_draw(uint32_t ps_hash, uint32_t vertices, bool indirect = false);  // true : draw à sauter (hash 0 = inconnu)
+bool on_dispatch(uint32_t cs_hash);  // compute shaders : true = dispatch à sauter
+void on_deferred_draw();             // draw d'un contexte différé (compté seulement)
 void on_insertion();                                 // passage du point d'insertion dans la frame
 void on_present();
 
 struct entry {
+  char kind = 'P';  // 'P' pixel shader, 'C' compute shader, 'D' draws des contextes différés
   uint32_t hash = 0;
   uint32_t draws = 0, vertices = 0;
   uint32_t indirect = 0;  // dont draws indirects (nombre de sommets inconnu : particules GPU…)

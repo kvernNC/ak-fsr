@@ -106,7 +106,10 @@ bool skip_smaa_draw() {
 }
 
 bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t, uint32_t) {
-  if (!is_immediate(cmd)) return false;
+  if (!is_immediate(cmd)) {
+    explorer::on_deferred_draw();
+    return false;
+  }
   const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
   return skip_smaa_draw() || hidden;
 }
@@ -117,7 +120,10 @@ bool on_indirect(command_list *cmd, indirect_command type, resource, uint64_t, u
 }
 
 bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, uint32_t, int32_t, uint32_t) {
-  if (!is_immediate(cmd)) return false;
+  if (!is_immediate(cmd)) {
+    explorer::on_deferred_draw();
+    return false;
+  }
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
   return skip_smaa_draw() || hidden;
 }
@@ -281,7 +287,9 @@ void note_exposure(device *dev) {
 }
 
 bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
-  if (!is_immediate(cmd) || g_cs.hash == 0) return false;
+  if (!is_immediate(cmd)) return false;
+  if (explorer::on_dispatch(g_cs.hash)) return true;  // diagnostic : dispatch masqué
+  if (g_cs.hash == 0) return false;
   device *dev = cmd->get_device();
   if (shader_patch::needs_jitter_cb(g_cs.hash)) bind_jitter_cb(dev, cmd);
   if (g_cs.hash == kInsertionCs) {
