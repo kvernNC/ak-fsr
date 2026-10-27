@@ -16,7 +16,8 @@ Sans overlay (petite fenêtre, prise en main à distance) :
 - Touches modifiables : `[AK-FSR] ReportKey=44`, `ReportModifier=17` (Ctrl), `ProfileKey=44`,
   `ProfileModifier=18` (Alt) ; codes VK, touche 0 = désactivée, modificateur 0 = aucun.
 - Pilotage par fichier (sans clavier) : `ak-fsr-command.txt` à côté de l'addon, lu deux fois par seconde puis
-  supprimé ; une commande par ligne : `report`, `profile <n>` (0 = référence) ou `profile next`, `toggle`.
+  supprimé ; une commande par ligne : `report`, `profile <n>` (0 = référence) ou `profile next`, `toggle`,
+  `screenshot <nom> [n]` (PNG sans compression dans `ak-fsr-shots/`, n frames consécutives ≤ 16).
   Le log note `AK-FSR: commande : …`.
 - Le profil actif est sauvegardé : avant de quitter, revenir à « 0. Référence » (sinon un profil « relancer »
   s'applique au lancement suivant).
