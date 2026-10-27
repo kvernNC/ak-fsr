@@ -6,7 +6,7 @@ ci-dessous, en repartant de la configuration par défaut entre deux tests.
 
 Réglages : onglet **AK-FSR** de l'overlay, ou section `[AK-FSR]` de `ReShade.ini` (jeu fermé).
 Raccourci : combo **« Profil de test (TESTING.md) »** de l'onglet — applique l'étape choisie (mode FSR,
-une seule option active, autres réglages par défaut ; netteté, vue de debug et touche on/off conservées).
+une seule option active, autres réglages par défaut ; netteté, auto-exposition, vue de debug et touche on/off conservées).
 Les profils marqués « relancer » demandent de redémarrer le jeu. Revenir à « 0. Référence » entre deux étapes.
 
 Sans overlay (petite fenêtre, prise en main à distance) :

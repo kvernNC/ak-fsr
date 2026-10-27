@@ -83,12 +83,13 @@ const test_profile kTestProfiles[] = {
     {"10. M8.5 exposition du jeu", [](akfsr::fsr::settings &s) { s.game_exposure = true; }},
 };
 
-// Garde le mode, la netteté et les options de diagnostic de l'utilisateur ; le reste revient au défaut.
+// Garde la netteté, l'auto-exposition et la vue de debug de l'utilisateur ; le reste revient au défaut.
 void apply_test_profile(const test_profile &p) {
   const auto current = akfsr::insertion::get_fsr_settings();
   akfsr::fsr::settings s;
   s.sharpness = current.sharpness;
   s.debug_view = current.debug_view;
+  s.auto_exposure = current.auto_exposure;  // réglage de l'utilisateur (M8.5 la coupe d'office à l'exécution)
   p.apply(s);
   akfsr::insertion::set_fsr_settings(s);
   akfsr::insertion::set_shader_patches_enabled(true);
