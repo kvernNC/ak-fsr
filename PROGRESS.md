@@ -154,6 +154,14 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
 - Prologue de `vkCreateDevice` de winevulkan reconnu par le décodeur (sinon la ligne de log donne les octets).
 - `radv_cooperative_matrix2_nv=true` doit être dans la ligne de lancement (lu par RADV avant l'addon).
 
+## État au soir du 27/10/2026
+
+- Branches : `dev` (outils, défaut ON) et `main` (version publiée, défaut OFF) ; travail sur `dev`, fusion dans `main`.
+- PC (RX 9070 XT, fenêtré 800×600) : toutes les options validées sauf la pluie (M7.3) ; M9 fermé
+  (`ScreenPercentage` cassé dans le jeu). Réglages conseillés : SMAA remplacé, biais de LOD -1, FSR 4 si dispo.
+- Steam Deck : paquet prêt (`deck-package/`, non versionné) et procédure en 4 étapes dans [DECK.md](DECK.md),
+  avec rapport automatique toutes les 30 s (fps, temps GPU, modèle FSR 4).
+
 ## Prochaines étapes proposées
 
 1. Premier lancement option coupée : me renvoyer les lignes `diagnostic :` de `ReShade.log`.
