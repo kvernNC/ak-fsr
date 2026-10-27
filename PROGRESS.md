@@ -134,6 +134,13 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
   `look 2 0 90`, rafales de 8 frames) : énergie HF 4,79 (biais 0) / 4,80 (-1,0), scintillement 11,85 / 11,06 :
   **pas de moiré ni de scintillement ajouté**. Recommandation : `LodBias=-1.0` avec FSR (gain modeste, sans coût),
   à confirmer en résolution native.
+- **Modèle FSR 4 imposé** (`Fsr4Model`) : le pilote choisit d'après les fonctions Vulkan (il interroge float16/int8,
+  structures d'accélération, synchronization2, matrices coopératives) et l'identité du GPU, toutes interceptées
+  dans sa table d'imports. Masquer FP8 et les matrices coopératives v2 fait passer de FP8 (30 shaders, FSR
+  0,22–0,26 ms à 800×600) à INT8 (11 shaders, ~0,14 ms), image correcte. Mais INT8, INT8-2 et Lite imposés (identité
+  Navi31 / Navi21 / Van Gogh, type intégré, matrices coopératives masquées) donnent **le même modèle** (empreinte
+  globale des shaders `0x1BCF1FEB`) : choix réduit à Auto / FP8 / INT8. Sur le Deck, le pilote lira le vrai
+  matériel : une empreinte différente de `0x1BCF1FEB` signalera un autre modèle (Lite attendu).
 - En mouvement (rotation simulée par `look`, rafales de 8 frames, zones voisines) : FSR 4 énergie HF 4,28 /
   scintillement 8,3, FSR 3.1 5,86 / 11,3.
 
