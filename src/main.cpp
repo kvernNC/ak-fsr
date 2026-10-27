@@ -125,9 +125,18 @@ void on_init_swapchain(reshade::api::swapchain *swapchain, bool resize) {
           desc.texture.width, desc.texture.height, static_cast<uint32_t>(desc.texture.format), resize ? 1 : 0);
 }
 
+std::string write_report();
+void next_test_profile();
+
+// Touches utilisables sans l'overlay (prise en main à distance, petite fenêtre) : [AK-FSR] ReportKey et
+// ProfileKey de ReShade.ini, codes VK (0 = désactivée). Défauts : Impr. écran et Pause.
+uint32_t g_report_key = VK_SNAPSHOT, g_profile_key = VK_PAUSE;
+
 void on_reshade_present(reshade::api::effect_runtime *runtime) {
   akfsr::jitter::on_present();
   if (runtime->is_key_pressed(kDumpFrameKey)) akfsr::dump::request_capture();
+  if (g_report_key != 0 && runtime->is_key_pressed(g_report_key)) write_report();
+  if (g_profile_key != 0 && runtime->is_key_pressed(g_profile_key)) next_test_profile();
   const uint32_t toggle = akfsr::insertion::get_toggle_key();
   if (toggle != 0 && runtime->is_key_pressed(toggle)) akfsr::insertion::toggle_bypass();
 }
@@ -261,6 +270,26 @@ std::string build_report() {
   return out;
 }
 
+// Ajoute le rapport à ak-fsr-report.txt et au log ; retourne un état lisible.
+std::string write_report() {
+  const std::string text = build_report();
+  reshade::log::message(reshade::log::level::info, ("AK-FSR: rapport de test :\n" + text).c_str());
+  const auto path = g_addon_dir / "ak-fsr-report.txt";
+  FILE *f = nullptr;
+  if (_wfopen_s(&f, path.c_str(), L"ab") != 0 || f == nullptr) return "écriture de " + path.string() + " impossible";
+  std::fwrite(text.data(), 1, text.size(), f);
+  std::fputs("----\n", f);
+  std::fclose(f);
+  return "ajouté à " + path.string();
+}
+
+int g_profile = 0;
+
+void next_test_profile() {
+  g_profile = (g_profile + 1) % static_cast<int>(std::size(kTestProfiles));
+  apply_test_profile(kTestProfiles[g_profile]);
+}
+
 void on_overlay(reshade::api::effect_runtime *) {
   akfsr::fsr::note_overlay_visible();
   ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " (" AKFSR_MILESTONE " : FSR AA natif)");
@@ -318,7 +347,7 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (changed) akfsr::insertion::set_mode(static_cast<akfsr::insertion::mode>(mode));
   toggle_key_row();
   {
-    static int profile = 0;
+    int &profile = g_profile;
     ImGui::SetNextItemWidth(260);
     if (ImGui::BeginCombo("Profil de test (TESTING.md)", kTestProfiles[profile].name)) {
       for (int i = 0; i < static_cast<int>(std::size(kTestProfiles)); ++i)
@@ -535,19 +564,8 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (!s.last_capture.empty()) ImGui::TextWrapped("Dernière capture : %s", s.last_capture.c_str());
   static std::string report_status;
   if (ImGui::Button("Rapport de test (fichier + presse-papiers)")) {
-    const std::string text = build_report();
-    ImGui::SetClipboardText(text.c_str());
-    const auto path = g_addon_dir / "ak-fsr-report.txt";
-    FILE *f = nullptr;
-    if (_wfopen_s(&f, path.c_str(), L"ab") == 0 && f != nullptr) {
-      std::fwrite(text.data(), 1, text.size(), f);
-      std::fputs("----\n", f);
-      std::fclose(f);
-      report_status = "ajouté à " + path.string() + " et copié";
-    } else {
-      report_status = "copié (écriture de " + path.string() + " impossible)";
-    }
-    reshade::log::message(reshade::log::level::info, ("AK-FSR: rapport de test :\n" + text).c_str());
+    ImGui::SetClipboardText(build_report().c_str());
+    report_status = write_report() + ", copié";
   }
   if (!report_status.empty()) ImGui::TextWrapped("Rapport : %s", report_status.c_str());
   static std::string image_dump;
@@ -564,6 +582,8 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
       reshade::register_event<reshade::addon_event::reshade_present>(on_reshade_present);
       g_addon_dir = module_dir(module);
+      reshade::get_config_value(nullptr, "AK-FSR", "ReportKey", g_report_key);
+      reshade::get_config_value(nullptr, "AK-FSR", "ProfileKey", g_profile_key);
       akfsr::dump::register_events(module_dir(module) / "ak-fsr-dumps");
       akfsr::passes::register_events();
       akfsr::insertion::register_events();
