@@ -139,7 +139,8 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - Option : curseur **« Biais de LOD (M8.4, au prochain lancement) »** ; `ReShade.ini` : `LodBias=-0.500000`
   (0 = désactivé). **Redémarrer le jeu** après changement (les samplers sont créés au chargement) ; le biais
   n'est appliqué que si le mode sauvegardé est FSR.
-- Valeurs à essayer : `-0.5`, puis `-1.0` (valeur d'AMD pour l'AA natif : log2(1) − 1).
+- Valeurs à essayer : `-0.5`, puis `-1.0` (valeur d'AMD pour l'AA natif : log2(1) − 1). Résultat PC du 27/10 :
+  -1,0 recommandé (netteté +3,5 %, pas de scintillement ajouté en mouvement).
 - Observer : textures au sol et façades lointaines plus nettes, sans grésillement supplémentaire en mouvement
   (comparer avec `LodBias=0` au même endroit, mêmes réglages). Trop négatif → moiré qui scintille.
 - Onglet : « en vigueur : -0.50, N samplers modifiés, M laissés » (N > 0 attendu en jeu).

@@ -11,7 +11,7 @@ procédure de test détaillée dans [TESTING.md](TESTING.md). Version de l'addon
 | M8.1 insertion au SMAA du jeu | codé, à tester | `SmaaInsertion` |
 | M8.2 backend FSR 3 DX11 natif | codé, à tester (DLL séparée) | `Backend=1` |
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
-| M8.4 biais de LOD des textures | fonctionne (24 samplers modifiés) ; gain faible à -0,5 | `LodBias` |
+| M8.4 biais de LOD des textures | fonctionne ; -1,0 recommandé (+3,5 % de netteté, pas de scintillement ajouté) | `LodBias` |
 | M8.5 exposition du jeu | fonctionne (sans OptiScaler) ; intérêt qualité à juger | `GameExposure`, `ExposureMode`, `ExposureScale` |
 | M10.2 provider FSR 4 du pilote | **fonctionne** (PC, FP8, sans OptiScaler) | `Fsr4Driver`, `Version` |
 | M10.3 menu Version FSR (2 / 3 / 4) | bascule 4 → 3.1 → 4 en jeu sans plantage | `Version` |
@@ -121,7 +121,10 @@ jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
   `radv_cooperative_matrix2_nv=true` requis (FP8).
 - **M8.4** (`LodBias=-0.5`, FSR 4) : 24 samplers modifiés, 6 laissés (comparaison / sans mips) ; même vue de
   départ que la référence : énergie HF de la ville +1 à +2 % (4,96 → 5,02–5,07), différence à peine visible à
-  800×600 (fumée en mouvement). À réessayer à -1,0 et en résolution native avant de conclure.
+  800×600 (fumée en mouvement). À -1,0 : +3,5 % à l'arrêt (5,14). En mouvement (même chargement, même rotation
+  `look 2 0 90`, rafales de 8 frames) : énergie HF 4,79 (biais 0) / 4,80 (-1,0), scintillement 11,85 / 11,06 :
+  **pas de moiré ni de scintillement ajouté**. Recommandation : `LodBias=-1.0` avec FSR (gain modeste, sans coût),
+  à confirmer en résolution native.
 - En mouvement (rotation simulée par `look`, rafales de 8 frames, zones voisines) : FSR 4 énergie HF 4,28 /
   scintillement 8,3, FSR 3.1 5,86 / 11,3.
 
