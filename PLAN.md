@@ -30,7 +30,8 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M7 : finitions | on/off et hautes lumières codés (branche `wip/m6-m10`) ; RCAS après tonemap et pluie bloqués | — |
 | M8 : optimisations Deck inspirées de Luma | M8.1–M8.4 codés (branche `wip/m6-m10`), à tester ; M8.5 à faire | à tester |
 | M9 : upscaling (rendu < natif) | `ScreenPercentage` du jeu cassé sur PC (testé) : voie simple fermée | — |
-| M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | M10.2–M10.3 **fonctionnent** (FP8, branche `wip/m6-m10`) | à tester (M10.1) |
+| M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | M10.2–M10.3 fonctionnent (FP8) | fonctionne : INT8, 47 fps |
+| M11 : FSR 4 Lite par la DLL DX12 | à faire | à faire |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
 budget visé de 2 ms. Détail du coût (préparation / FSR / copies / flush DXVK) : à relever sur Deck.
@@ -188,6 +189,16 @@ Ne pas passer au suivant sans validation.
   Options de repli si le provider pilote ne marche pas sur le Deck : fsr4-vk (INT8 4.1.1, GPL, DLL séparée
   installée par l'utilisateur) ou backend DX12 via vkd3d-proton avec `FSR4_UPGRADE=1` (Lite officiel,
   pont DX11↔DX12 à écrire). Voir §8.2 et §8.3.
+
+- **M11 — FSR 4 Lite sur le Deck par la DLL DX12** : la DLL Vulkan du pilote (`amdvkffx64.dll`) choisit son
+  modèle d'après Vulkan seul et prend l'INT8 sur Van Gogh (constaté, empreinte `0x1BCF1FEB`). La DLL DX12
+  (`amdxcffx64.dll`, même FSR 4.1.2) demande la famille du GPU au pilote par `amdxc64.dll` ; sous Wine, sans
+  réponse, elle refuse tout modèle. Méthode publique de FSR4Injector (Rayekkk, BSD-3 ; shim `amdxc64` LGPL,
+  dérivé de GE-Proton) : un `amdxc64.dll` de remplacement renvoie la vraie famille et la révision du GPU, et AMD
+  choisit Lite sur RDNA 3.5 / Van Gogh. Pour AK-FSR (DX11) : (1) pont DX11 → DX12 (device D3D12 de vkd3d-proton,
+  textures et barrières partagées avec DXVK) ; (2) notre propre `amdxc64.dll`, écrit d'après les faits
+  d'interface ; (3) FSR 4 par `amdxcffx64.dll` sur ce device. Critère : Lite relevé sur le Deck, coût ≤ FSR 4 INT8
+  actuel, aucun plantage. Lourd et incertain (pont DX11↔DX12 jugé instable sous Proton).
 
 ## 8. FSR 4 (notes)
 
