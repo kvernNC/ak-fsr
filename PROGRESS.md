@@ -70,6 +70,15 @@ Exclus comme demandé : M6, M9.
 
 ## Blocages
 
+- **M9 — upscaling par `ScreenPercentage`** (essai du 27/10, `BmSystemSettings.ini`, toutes les sections à 80,
+  `UpscaleScreenPercentage=True`) : le jeu applique le réglage, mais l'image est inutilisable (bandes noires en
+  haut et à gauche, fantômes, couleurs fausses), **avec ou sans AK-FSR actif et avec ou sans RenoDX** : le
+  portage PC gère mal ce réglage. Voie simple de M9 fermée ; l'alternative (réduire nous-mêmes viewport et cibles
+  du jeu) serait de la rétro-ingénierie lourde. Réglage remis à 100.
+- **Console UE3** : déclarée (`BmEngine.ini` ConsoleClassName=Engine.Console, `BmInput.ini` ConsoleKey=F10,
+  TypeKey=Quote) mais sans effet observable avec des touches simulées (SendInput puis PostMessage). Les touches
+  simulées n'atteignent pas non plus les raccourcis de l'addon (F10) : test non concluant, abandonné.
+
 - **Incompatibilité avec OptiScaler** : avec OptiScaler chargé (il intercepte FidelityFX et Vulkan), couper
   M8.5 faisait planter le jeu (`free(): double free detected in tcache 2`, 3 fois sur 3). Sans OptiScaler
   (ReShade seul en `dxgi.dll`) : 4 cycles M8.5 → référence sans erreur. **Ne pas utiliser AK-FSR avec

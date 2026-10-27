@@ -29,7 +29,7 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M6 : shaders sensibles au jitter | éclairage différé corrigé ; AO, réflexions, décalques à voir | — |
 | M7 : finitions | on/off et hautes lumières codés (branche `wip/m6-m10`) ; RCAS après tonemap et pluie bloqués | — |
 | M8 : optimisations Deck inspirées de Luma | M8.1–M8.4 codés (branche `wip/m6-m10`), à tester ; M8.5 à faire | à tester |
-| M9 : upscaling (rendu < natif) | exploratoire | — |
+| M9 : upscaling (rendu < natif) | `ScreenPercentage` du jeu cassé sur PC (testé) : voie simple fermée | — |
 | M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | M10.2–M10.3 **fonctionnent** (FP8, branche `wip/m6-m10`) | à tester (M10.1) |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
