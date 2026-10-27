@@ -258,7 +258,11 @@ void note_exposure(device *dev) {
     if (res.desc.type != resource_type::texture_2d || res.desc.texture.width != 1 || res.desc.texture.height != 1)
       continue;
     std::lock_guard lock(g_report_mutex);
-    if (g_report.exposure.handle != res.handle) {
+    // Le jeu alterne deux textures d'exposition (double tampon) : journaliser chaque texture une seule fois.
+    static std::array<uint64_t, 8> seen{};
+    static size_t seen_count = 0;
+    if (std::find(seen.begin(), seen.end(), res.handle) == seen.end()) {
+      seen[seen_count++ % seen.size()] = res.handle;
       char buf[160];
       std::snprintf(buf, sizeof(buf), "AK-FSR: tonemap 0x%08X : texture 1x1 %s en t%d (exposition du jeu ?)", g_cs.hash,
                     dump::format_string(res.desc.texture.format).c_str(), slot);
