@@ -13,6 +13,7 @@
 #include <iterator>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "exposure.hpp"
 #include "frame_dump.hpp"
@@ -318,6 +319,7 @@ void next_test_profile() {
 //   toggle            touche on/off
 //   shaders           active l'explorateur de PS et écrit la liste de la frame dans ak-fsr-shaders.txt
 //   hide <hash> / show <hash>|all  masque / rétablit les draws d'un PS (hash hexadécimal, 0x facultatif)
+//   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
 //                         (<nom>_0.png …, n ≤ 16) pour juger le scintillement
 int g_shader_dump_in = 0;  // frames avant l'écriture de ak-fsr-shaders.txt (0 : rien)
@@ -334,6 +336,27 @@ void dump_shader_list() {
                  e.draws, e.vertices, e.hidden ? "masqué" : "");
   std::fclose(f);
   log_fmt(reshade::log::level::info, "AK-FSR: liste des pixel shaders écrite : %zu PS", entries.size());
+}
+
+// Comparaisons en cours (commande compare) : étape 0 = capture normale puis masquage, 1 = capture masquée.
+std::vector<uint32_t> g_compare_queue;
+int g_compare_step = 0;
+
+void run_compare(reshade::api::effect_runtime *runtime) {
+  if (g_compare_queue.empty()) return;
+  const uint32_t hash = g_compare_queue.front();
+  char name[32];
+  std::snprintf(name, sizeof(name), "%08X_%s", hash, g_compare_step == 0 ? "on" : "off");
+  const std::string result = akfsr::screenshot::capture(runtime, g_addon_dir / "ak-fsr-shots" / (std::string(name) + ".png"));
+  log_fmt(reshade::log::level::info, "AK-FSR: compare : capture %s", result.c_str());
+  if (g_compare_step == 0) {
+    akfsr::explorer::set_hidden(hash, true);  // effet sur la frame suivante
+    g_compare_step = 1;
+  } else {
+    akfsr::explorer::set_hidden(hash, false);
+    g_compare_step = 0;
+    g_compare_queue.erase(g_compare_queue.begin());
+  }
 }
 
 std::string g_burst_name;
@@ -373,6 +396,15 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
       else
         akfsr::explorer::set_hidden(hash, cmd == "hide");
     }
+  } else if (cmd == "compare") {
+    akfsr::explorer::set_enabled(true);
+    size_t pos = 0;
+    while (pos < arg.size()) {
+      const size_t end = std::min(arg.find(' ', pos), arg.size());
+      if (const uint32_t hash = static_cast<uint32_t>(std::strtoul(arg.substr(pos, end - pos).c_str(), nullptr, 16)))
+        g_compare_queue.push_back(hash);
+      pos = end + 1;
+    }
   } else if (cmd == "screenshot") {
     std::string name = arg.empty() ? "capture" : arg;
     int frames = 1;
@@ -402,6 +434,7 @@ void capture_burst(reshade::api::effect_runtime *runtime) {
 
 void poll_command_file(reshade::api::effect_runtime *runtime) {
   capture_burst(runtime);
+  run_compare(runtime);
   if (g_shader_dump_in > 0 && --g_shader_dump_in == 0) dump_shader_list();
   static uint32_t frame = 0;
   if (++frame % 30 != 0) return;
