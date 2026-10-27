@@ -12,7 +12,7 @@ procédure de test détaillée dans [TESTING.md](TESTING.md). Version de l'addon
 | M8.2 backend FSR 3 DX11 natif | codé, à tester (DLL séparée) | `Backend=1` |
 | M8.3 vecteurs du jeu tels quels | codé, à tester | `GameMotionVectors`, `GameMvScale`, `GameMvFlipY` |
 | M8.4 biais de LOD des textures | codé, à tester | `LodBias` |
-| M8.5 exposition du jeu | codé, à tester (contenu de la texture inconnu) | `GameExposure`, `ExposureMode`, `ExposureScale` |
+| M8.5 exposition du jeu | **neutralisé** : le jeu plante après l'arrêt de l'option (voir Blocages) | `GameExposure` + `ExposureExperimental=1` |
 | M10.2 provider FSR 4 du pilote | codé, à tester (DLL AMD à fournir) | `Fsr4Driver`, `Version` |
 | M10.3 menu Version FSR (2 / 3 / 4) | codé, à tester | `Version` |
 
@@ -70,6 +70,13 @@ Exclus comme demandé : M6, M9.
 
 ## Blocages
 
+- **M8.5 — plantage** : activer l'exposition du jeu fonctionne, mais le jeu plante (`free(): double free
+  detected in tcache 2`, côté Linux, sur le thread de rendu) 20 à 500 ms après l'avoir coupée, de façon
+  reproductible (3 fois). Ni la recréation du contexte FSR, ni la reconstruction complète des ressources FSR
+  n'y changent rien. Pistes : le CS D3D11 de conversion (compilé par vkd3d) ou le passage de la texture à
+  FidelityFX ; à départager en activant l'un sans l'autre. Option neutralisée (ignorée sauf
+  `ExposureExperimental=1`) et retirée des profils de test.
+
 - **M7.3 — RCAS après tonemap** : le RCAS intégré à FSR (`Sharpness`) couvre le besoin. Un RCAS
   après le tonemap (variante sans grain du mod DLAA) demande d'agir *après* le dispatch du tonemapper ;
   ReShade n'a pas d'événement « après dispatch », il faudrait remplacer le tonemapper ou s'accrocher à la
@@ -80,6 +87,17 @@ Exclus comme demandé : M6, M9.
   avant `0xB2A276FD` (il faudrait alors les sauter puis les rejouer après FSR) ou après (rien à faire).
 - **glslang indisponible** : nouvelles passes en HLSL compilé à l'exécution ; `shaders/fsr_prepare.comp`
   et son SPIR-V précompilé n'ont pas été modifiés.
+
+## Résultats des tests du 27/10/2026 (PC, fenêtré 800×600, prise en main à distance)
+
+Pilotage par `ak-fsr-command.txt` (l'overlay et Impr. écran ne passent pas à distance) ; qualité d'image non
+jugeable (double compression vidéo) : seul le fonctionnement est vérifié.
+
+- Défaut, M7.1 (toggle), M7.2, M8.2 (DX11 : **0,18 ms GPU contre 0,27 ms** en Vulkan à 800×600), M8.1+M8.2,
+  M8.3 (UV et [-1,1]) : fonctionnent, transitions entre profils sans plantage.
+- M8.1 : repli correct sur `0xB2A276FD` (AA du jeu coupé) ; à retester avec l'AA du jeu sur « Élevé ».
+- La cible R16G16_FLOAT effacée (méthode de Luma) **est RT4**.
+- Changements de taille de fenêtre : contexte FSR recréé proprement à chaque fois.
 
 ## Points incertains à vérifier en priorité (M10.2)
 

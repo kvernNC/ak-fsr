@@ -200,7 +200,10 @@ fichier avec `ReShade.log`.
 - Me noter le ou les hash qui font disparaître la pluie, et s'ils sont « avant » ou « après insertion ».
   Faire aussi un rapport de test et une capture F10 au même moment.
 
-## 10. M8.5 — Exposition du jeu (à la place de l'auto-exposition de FSR)
+## 10. M8.5 — Exposition du jeu (à la place de l'auto-exposition de FSR) — NEUTRALISÉ
+
+> Plantage reproductible après l'arrêt de l'option (voir PROGRESS.md) : ne pas tester sans
+> `ExposureExperimental=1`, et seulement pour l'analyse du plantage.
 
 - Diagnostic d'abord, option coupée : ligne **« exposition 1x1 (M8.5) »** de l'onglet et log
   `tonemap 0x…: texture 1x1 <format> en tN (exposition du jeu ?)`. Si rien n'apparaît, le tonemapper ne lit

@@ -46,6 +46,9 @@ struct settings {
   bool game_exposure = false;
   int exposure_mode = 0;       // exposure::mode : tel quel, inverse, exp2, exp2(-x)
   float exposure_scale = 1.0f;
+  // M8.5 neutralisé : le jeu plante (double free côté pilote) peu après avoir coupé l'option. Ne s'applique
+  // qu'avec ExposureExperimental=1 dans ReShade.ini, pour l'analyse.
+  bool exposure_experimental = false;
 };
 
 struct frame_inputs {

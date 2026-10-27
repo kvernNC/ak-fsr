@@ -85,6 +85,7 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
   reshade::get_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
   reshade::get_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
+  reshade::get_config_value(nullptr, kSection, "ExposureExperimental", s.exposure_experimental);
   lod_bias::configure(s.lod_bias, g_mode.load() == mode::fsr);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
   {
@@ -138,7 +139,14 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     const fsr::settings s = get_fsr_settings();
     auto *native = reinterpret_cast<ID3D11Device *>(dev->get_native());
     auto *imm = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
-    if (s.game_exposure)
+    static bool logged_exposure_off = false;
+    if (s.game_exposure && !s.exposure_experimental && !logged_exposure_off) {
+      logged_exposure_off = true;
+      reshade::log::message(reshade::log::level::warning,
+                            "AK-FSR: exposition du jeu (M8.5) neutralisée : plantage après l'arrêt de l'option, en "
+                            "cours d'analyse (ExposureExperimental=1 pour la forcer)");
+    }
+    if (s.game_exposure && s.exposure_experimental)
       in.exposure = exposure::prepare(native, imm,
                                       reinterpret_cast<ID3D11Resource *>(passes::get_report().exposure.handle),
                                       static_cast<exposure::mode>(s.exposure_mode), s.exposure_scale);
