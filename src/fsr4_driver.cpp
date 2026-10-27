@@ -454,6 +454,14 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
     std::snprintf(buf, sizeof(buf), "shaders créés avec le contexte : %u, empreinte globale 0x%08X",
                   g_context_modules.load(), g_context_hash.load());
     log(reshade::log::level::info, buf);
+    // Les modèles INT8 compilent leurs shaders à la création (FP8 au premier dispatch, reconnu à leurs noms) :
+    // empreinte connue = INT8 relevé sur PC ; autre empreinte = autre variante (Lite attendu sur le Deck).
+    constexpr uint32_t kInt8Hash = 0x1BCF1FEB;  // RX 9070 XT, FP8 masqué (27/10/2026)
+    std::lock_guard lock(g_mutex);
+    g_info.context_shaders = g_context_modules.load();
+    g_info.context_hash = g_context_hash.load();
+    if (g_info.context_shaders > 0)
+      g_info.model = g_info.context_hash == kInt8Hash ? "INT8" : "INT8, autre variante (Lite probable)";
   }
   if (rc == FFX_API_RETURN_OK && g_provider.query != nullptr) {
     // Nom du provider effectivement créé par le pilote (FSR4-i8, FSR4-i8-2, FSR4L-i8…).

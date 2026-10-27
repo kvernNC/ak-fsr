@@ -46,6 +46,7 @@ struct info {
   std::string model;           // M10.3 : FP8, INT8, INT8-2, INT8 Lite (déduit de model_seen), vide si inconnu
   uint32_t shaders = 0, shaders_rewritten = 0, shader_failures = 0;
   std::string created_name;    // nom du provider créé, demandé au contexte (FSR4-i8, FSR4L-i8…)
+  uint32_t context_shaders = 0, context_hash = 0;  // shaders créés avec le dernier contexte et leur empreinte
 };
 info get_info();
 
