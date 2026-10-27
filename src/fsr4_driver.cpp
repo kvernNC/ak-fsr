@@ -7,6 +7,7 @@
 
 #include <cctype>
 #include <atomic>
+#include <algorithm>
 #include <cstdio>
 #include <iterator>
 #include <cstdlib>
@@ -227,6 +228,70 @@ VKAPI_ATTR void VKAPI_CALL hooked_props2(VkPhysicalDevice physical, VkPhysicalDe
   apply_spoof(p->properties, "vkGetPhysicalDeviceProperties2");
 }
 
+// Capacités masquées au pilote selon le modèle imposé (il choisit aussi d'après elles : constaté, l'identité
+// Van Gogh seule laisse FP8). FP8 et matrices coopératives v2 : masquées hors FP8 ; matrices coopératives de
+// base (WMMA, RDNA 3) : masquées aussi pour INT8-2 et Lite (RDNA 2 / Van Gogh).
+constexpr auto kFloat8Features = static_cast<VkStructureType>(1000567000);
+constexpr auto kCoopMatrix2Features = static_cast<VkStructureType>(1000593000);
+
+bool hidden_extension(const char *name) {
+  const int m = g_model.load();
+  if (m == 0 || m == 1) return false;
+  if (std::strcmp(name, "VK_EXT_shader_float8") == 0 || std::strcmp(name, "VK_NV_cooperative_matrix2") == 0) return true;
+  return m >= 3 && std::strcmp(name, "VK_KHR_cooperative_matrix") == 0;
+}
+
+bool hidden_features(VkStructureType type) {
+  const int m = g_model.load();
+  if (m == 0 || m == 1) return false;
+  if (type == kFloat8Features || type == kCoopMatrix2Features) return true;
+  return m >= 3 && type == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR;
+}
+
+PFN_vkGetPhysicalDeviceFeatures2 g_real_features2 = nullptr;
+PFN_vkEnumerateDeviceExtensionProperties g_real_enum_ext = nullptr;
+std::atomic<int> g_feature_logs{0};
+
+VKAPI_ATTR void VKAPI_CALL hooked_features2(VkPhysicalDevice physical, VkPhysicalDeviceFeatures2 *f) {
+  g_real_features2(physical, f);
+  std::string chain;
+  for (auto *s = static_cast<VkBaseOutStructure *>(f->pNext); s != nullptr; s = s->pNext) {
+    chain += " " + std::to_string(static_cast<int>(s->sType));
+    if (hidden_features(s->sType)) {  // les VkBool32 de la structure (taille connue par type) à VK_FALSE
+      const int fields_count = s->sType == kCoopMatrix2Features ? 7 : 2;  // float8 et KHR : 2 champs
+      auto *fields = reinterpret_cast<VkBool32 *>(reinterpret_cast<uint8_t *>(s) + sizeof(VkBaseOutStructure));
+      for (int i = 0; i < fields_count; ++i) fields[i] = VK_FALSE;
+      chain += "(masquée)";
+    }
+  }
+  if (g_feature_logs.fetch_add(1) < 4)
+    log(reshade::log::level::info, "vkGetPhysicalDeviceFeatures2 lu par le pilote :" + chain);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL hooked_enum_ext(VkPhysicalDevice physical, const char *layer, uint32_t *count,
+                                               VkExtensionProperties *props) {
+  if (g_model.load() <= 1) return g_real_enum_ext(physical, layer, count, props);
+  // Liste complète, filtrée, puis rendue selon la convention Vulkan (taille seule ou copie).
+  uint32_t n = 0;
+  g_real_enum_ext(physical, layer, &n, nullptr);
+  std::vector<VkExtensionProperties> all(n);
+  g_real_enum_ext(physical, layer, &n, all.data());
+  std::vector<VkExtensionProperties> kept;
+  for (const auto &e : all)
+    if (!hidden_extension(e.extensionName)) kept.push_back(e);
+  if (g_feature_logs.fetch_add(1) < 4)
+    log(reshade::log::level::info, "vkEnumerateDeviceExtensionProperties lu par le pilote : " +
+                                       std::to_string(all.size() - kept.size()) + " extension(s) masquée(s)");
+  if (props == nullptr) {
+    *count = static_cast<uint32_t>(kept.size());
+    return VK_SUCCESS;
+  }
+  const uint32_t copied = std::min<uint32_t>(*count, static_cast<uint32_t>(kept.size()));
+  std::copy_n(kept.begin(), copied, props);
+  *count = copied;
+  return copied < kept.size() ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
 // Remplace dans la table d'imports de `module` les fonctions de vulkan-1.dll nommées.
 int patch_imports(HMODULE module) {
   auto *base = reinterpret_cast<uint8_t *>(module);
@@ -250,6 +315,12 @@ int patch_imports(HMODULE module) {
       } else if (std::strcmp(name, "vkGetPhysicalDeviceProperties2") == 0) {
         g_real_props2 = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties2>(slots->u1.Function);
         replacement = reinterpret_cast<void *>(&hooked_props2);
+      } else if (std::strcmp(name, "vkGetPhysicalDeviceFeatures2") == 0) {
+        g_real_features2 = reinterpret_cast<PFN_vkGetPhysicalDeviceFeatures2>(slots->u1.Function);
+        replacement = reinterpret_cast<void *>(&hooked_features2);
+      } else if (std::strcmp(name, "vkEnumerateDeviceExtensionProperties") == 0) {
+        g_real_enum_ext = reinterpret_cast<PFN_vkEnumerateDeviceExtensionProperties>(slots->u1.Function);
+        replacement = reinterpret_cast<void *>(&hooked_enum_ext);
       }
       if (replacement == nullptr) continue;
       DWORD old = 0;
@@ -298,8 +369,8 @@ bool load() {
                 ")");
   {
     const int patched = patch_imports(driver);
-    log(patched == 2 ? reshade::log::level::info : reshade::log::level::warning,
-        "interception de l'identification du GPU : " + std::to_string(patched) + "/2 import(s)");
+    log(patched == 4 ? reshade::log::level::info : reshade::log::level::warning,
+        "interception de l'identification du GPU : " + std::to_string(patched) + "/4 import(s)");
   }
   auto update = reinterpret_cast<update_provider_ex_fn>(GetProcAddress(driver, "UpdateFfxApiProviderEx"));
   if (update == nullptr) return fail("export UpdateFfxApiProviderEx absent de amdvkffx64.dll");
@@ -339,6 +410,7 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
   if (!load()) return FFX_API_RETURN_NO_PROVIDER;
   g_base_gdpa = get_device_proc_addr;
   g_identity_logs = 0;
+  g_feature_logs = 0;
   {
     std::lock_guard lock(g_mutex);
     g_info.model_seen.clear();  // nom du modèle du nouveau contexte
