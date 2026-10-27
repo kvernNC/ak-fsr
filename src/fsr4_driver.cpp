@@ -195,9 +195,10 @@ constexpr spoof kSpoofs[] = {
     {0x163F, "AMD Custom GPU 0405 (RADV VANGOGH)"},
 };
 
+std::atomic<int> g_identity_logs{0};  // remis à zéro à chaque création de contexte
+
 void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
-  static std::atomic<bool> logged{false};
-  if (!logged.exchange(true)) {
+  if (g_identity_logs.fetch_add(1) < 4) {
     char buf[256];
     std::snprintf(buf, sizeof(buf), "%s lu par le pilote : vendeur 0x%04x, appareil 0x%04x, « %s »", call, p.vendorID,
                   p.deviceID, p.deviceName);
@@ -337,6 +338,12 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
                                VkPhysicalDevice physical, PFN_vkGetDeviceProcAddr get_device_proc_addr) {
   if (!load()) return FFX_API_RETURN_NO_PROVIDER;
   g_base_gdpa = get_device_proc_addr;
+  g_identity_logs = 0;
+  {
+    std::lock_guard lock(g_mutex);
+    g_info.model_seen.clear();  // nom du modèle du nouveau contexte
+    g_info.model.clear();
+  }
   ffxCreateBackendVKDesc backend{};
   backend.header.type = kBackendVkDescSdk2;
   backend.vkDevice = device;
