@@ -190,6 +190,10 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - Log : `interception de l'identification du GPU : 2/2 import(s)`, `… lu par le pilote : vendeur 0x1002,
   appareil 0x…`, `modèle imposé : …`, puis `modèle relevé dans les shaders : …`.
 - Ne pas imposer FP8 sur un GPU qui ne le prend pas en charge (Deck) : échec de création ou plantage attendu.
+- Résultat PC : FP8 ↔ INT8 imposables ; les variantes INT8 (2, 3, 4) donnent le même modèle (empreinte globale
+  `0x1BCF1FEB`), d'où le choix Auto / FP8 / INT8 dans l'onglet.
+- **Deck (M10.1)** : en Auto, relever dans le log `shaders créés avec le contexte : N, empreinte globale 0x…` ;
+  une empreinte différente de `0x1BCF1FEB` = un autre modèle que l'INT8 du PC (Lite attendu).
 
 ## 9. M10.3 — Menu « Version FSR » (2.3.3 / 3.1.4 / 4.1.2)
 
