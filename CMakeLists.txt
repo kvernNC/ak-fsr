@@ -7,7 +7,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")  # CRT statique : pas de dépend
 
 # Outils de développement (profils, rapport, pilotage par fichier, captures, compteurs) : ON sur la branche dev,
 # OFF sur main (version publiée).
-option(AKFSR_DEV_TOOLS "Compiler les outils de développement" ON)
+option(AKFSR_DEV_TOOLS "Compiler les outils de développement" OFF)
 
 add_library(ak-fsr SHARED
   src/main.cpp
