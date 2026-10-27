@@ -320,6 +320,8 @@ void next_test_profile() {
 //   shaders           active l'explorateur de PS et écrit la liste de la frame dans ak-fsr-shaders.txt
 //   hide <hash> / show <hash>|all  masque / rétablit les draws d'un PS (hash hexadécimal, 0x facultatif)
 //   capture           capture complète d'une frame dans ak-fsr-dumps/ (comme F10)
+//   key <vk>          appui + relâchement d'une touche (code VK hexadécimal, ex. DE = « ' », console UE3)
+//   type <texte>      tape le texte (caractères Unicode) puis Entrée (console UE3)
 //   look <dx> <dy> <frames>  déplace la souris de (dx, dy) à chaque frame pendant <frames> frames (caméra)
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
@@ -415,6 +417,33 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     }
   } else if (cmd == "capture") {
     akfsr::dump::request_capture();
+  } else if (cmd == "key") {
+    const WORD vk = static_cast<WORD>(std::strtoul(arg.c_str(), nullptr, 16));
+    INPUT in[2] = {};
+    in[0].type = in[1].type = INPUT_KEYBOARD;
+    in[0].ki.wVk = in[1].ki.wVk = vk;
+    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, in, sizeof(INPUT));
+  } else if (cmd == "type") {
+    std::vector<INPUT> in;
+    wchar_t wide[512];
+    const int n = MultiByteToWideChar(CP_UTF8, 0, arg.c_str(), -1, wide, 512) - 1;
+    for (int i = 0; i < n; ++i)
+      for (DWORD up : {0ul, static_cast<DWORD>(KEYEVENTF_KEYUP)}) {
+        INPUT k{};
+        k.type = INPUT_KEYBOARD;
+        k.ki.wScan = wide[i];
+        k.ki.dwFlags = KEYEVENTF_UNICODE | up;
+        in.push_back(k);
+      }
+    for (DWORD up : {0ul, static_cast<DWORD>(KEYEVENTF_KEYUP)}) {
+      INPUT k{};
+      k.type = INPUT_KEYBOARD;
+      k.ki.wVk = VK_RETURN;
+      k.ki.dwFlags = up;
+      in.push_back(k);
+    }
+    SendInput(static_cast<UINT>(in.size()), in.data(), sizeof(INPUT));
   } else if (cmd == "look") {
     int dx = 0, dy = 0, frames = 0;
     if (sscanf_s(arg.c_str(), "%d %d %d", &dx, &dy, &frames) == 3 && frames > 0) {

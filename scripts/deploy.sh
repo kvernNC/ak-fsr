@@ -4,7 +4,7 @@
 # amdvkffx64.dll (pilote AMD, fournie par l'utilisateur) déplacée depuis le dossier du jeu si elle s'y trouve.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
-game="${AK_GAME_DIR:-$HOME/.local/share/Steam/steamapps/common/Batman Arkham Knight/Binaries/Win64}"
+game="${AK_GAME_DIR:-$HOME/.local/share/Steam/steamapps/common/Batman Arkham Knight/Binaries/Win64}"  # dossier Binaries/Win64 du jeu
 # Copie puis renommage : sans risque si le jeu tourne (le fichier chargé n'est pas réécrit sur place).
 install_file() { cp "$1" "$2.new" && mv -f "$2.new" "$2" && echo "'$1' -> '$2'"; }
 install_file "$root/build/ak-fsr.addon64" "$game/ak-fsr.addon64"

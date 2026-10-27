@@ -26,6 +26,7 @@ Sans overlay (petite fenêtre, prise en main à distance) :
   `compare <hash> …` : pour chaque PS, captures `<hash>_on` / `<hash>_off` sur deux frames consécutives.
   `look <dx> <dy> <frames>` : mouvement de souris simulé (rotation de caméra) pendant n frames.
   `capture` : capture complète d'une frame dans `ak-fsr-dumps/` (équivalent de F10).
+  `key <vk hexa>` (touche simulée), `type <texte>` (texte puis Entrée), pour la console UE3 (`key DE` = « ' »).
   Le log note `AK-FSR: commande : …`.
 - Le profil actif est sauvegardé : avant de quitter, revenir à « 0. Référence » (sinon un profil « relancer »
   s'applique au lancement suivant).
