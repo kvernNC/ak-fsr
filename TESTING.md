@@ -182,6 +182,15 @@ Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 - Deck (M10.1/M10.2) : même installation, sans `radv_cooperative_matrix2_nv`. Relever les extensions
   « absentes du GPU », le nom de modèle relevé, et si le contexte se crée.
 
+## 8 bis. Modèle FSR 4 imposé
+
+- Option : combo **« Modèle FSR 4 »** (Auto / FP8 / INT8 / INT8-2 / INT8 Lite) ; `ReShade.ini` : `Fsr4Model=0..4` ;
+  commande `model <n>`. L'addon intercepte `vkGetPhysicalDeviceProperties`(2) dans la table d'imports de
+  `amdvkffx64.dll` et présente au pilote un GPU représentatif du modèle (Van Gogh `0x163F` pour le Lite).
+- Log : `interception de l'identification du GPU : 2/2 import(s)`, `… lu par le pilote : vendeur 0x1002,
+  appareil 0x…`, `modèle imposé : …`, puis `modèle relevé dans les shaders : …`.
+- Ne pas imposer FP8 sur un GPU qui ne le prend pas en charge (Deck) : échec de création ou plantage attendu.
+
 ## 9. M10.3 — Menu « Version FSR » (2.3.3 / 3.1.4 / 4.1.2)
 
 - Prérequis : M10.2 installé, `Fsr4Driver=1`, backend Vulkan (`Backend=0` ; le menu est masqué en DX11).

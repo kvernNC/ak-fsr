@@ -321,6 +321,10 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     } else {
       log_fmt(reshade::log::level::warning, "AK-FSR: commande : profil inconnu « %s » (0 à %d)", arg.c_str(), count - 1);
     }
+  } else if (cmd == "model") {  // modèle FSR 4 imposé : 0 auto, 1 FP8, 2 INT8, 3 INT8-2, 4 Lite
+    auto s = akfsr::insertion::get_fsr_settings();
+    s.fsr4_model = std::clamp(std::atoi(arg.c_str()), 0, 4);
+    akfsr::insertion::set_fsr_settings(s);
   } else if (cmd == "toggle") {
     akfsr::insertion::toggle_bypass();
   } else if (cmd == "shaders") {
