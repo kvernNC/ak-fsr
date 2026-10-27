@@ -128,15 +128,27 @@ void on_init_swapchain(reshade::api::swapchain *swapchain, bool resize) {
 std::string write_report();
 void next_test_profile();
 
-// Touches utilisables sans l'overlay (prise en main à distance, petite fenêtre) : [AK-FSR] ReportKey et
-// ProfileKey de ReShade.ini, codes VK (0 = désactivée). Défauts : Impr. écran et Pause.
-uint32_t g_report_key = VK_SNAPSHOT, g_profile_key = VK_PAUSE;
+// Touches utilisables sans l'overlay (prise en main à distance, petite fenêtre) : [AK-FSR] ReportKey /
+// ReportModifier et ProfileKey / ProfileModifier de ReShade.ini, codes VK (touche 0 = désactivée,
+// modificateur 0 = aucun). Défauts : Ctrl + Impr. écran et Alt + Impr. écran.
+struct hotkey {
+  uint32_t key, modifier;
+};
+hotkey g_report_key{VK_SNAPSHOT, VK_CONTROL}, g_profile_key{VK_SNAPSHOT, VK_MENU};
+
+bool hotkey_pressed(reshade::api::effect_runtime *runtime, const hotkey &k, const hotkey &other) {
+  if (k.key == 0 || !runtime->is_key_pressed(k.key)) return false;
+  if (k.modifier != 0 && !runtime->is_key_down(k.modifier)) return false;
+  // Même touche avec un autre modificateur enfoncé : c'est l'autre raccourci.
+  return !(other.key == k.key && other.modifier != 0 && other.modifier != k.modifier &&
+           runtime->is_key_down(other.modifier));
+}
 
 void on_reshade_present(reshade::api::effect_runtime *runtime) {
   akfsr::jitter::on_present();
   if (runtime->is_key_pressed(kDumpFrameKey)) akfsr::dump::request_capture();
-  if (g_report_key != 0 && runtime->is_key_pressed(g_report_key)) write_report();
-  if (g_profile_key != 0 && runtime->is_key_pressed(g_profile_key)) next_test_profile();
+  if (hotkey_pressed(runtime, g_report_key, g_profile_key)) write_report();
+  if (hotkey_pressed(runtime, g_profile_key, g_report_key)) next_test_profile();
   const uint32_t toggle = akfsr::insertion::get_toggle_key();
   if (toggle != 0 && runtime->is_key_pressed(toggle)) akfsr::insertion::toggle_bypass();
 }
@@ -582,8 +594,10 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
       reshade::register_event<reshade::addon_event::reshade_present>(on_reshade_present);
       g_addon_dir = module_dir(module);
-      reshade::get_config_value(nullptr, "AK-FSR", "ReportKey", g_report_key);
-      reshade::get_config_value(nullptr, "AK-FSR", "ProfileKey", g_profile_key);
+      reshade::get_config_value(nullptr, "AK-FSR", "ReportKey", g_report_key.key);
+      reshade::get_config_value(nullptr, "AK-FSR", "ReportModifier", g_report_key.modifier);
+      reshade::get_config_value(nullptr, "AK-FSR", "ProfileKey", g_profile_key.key);
+      reshade::get_config_value(nullptr, "AK-FSR", "ProfileModifier", g_profile_key.modifier);
       akfsr::dump::register_events(module_dir(module) / "ak-fsr-dumps");
       akfsr::passes::register_events();
       akfsr::insertion::register_events();

@@ -10,11 +10,11 @@ une seule option active, autres réglages par défaut ; netteté, vue de debug e
 Les profils marqués « relancer » demandent de redémarrer le jeu. Revenir à « 0. Référence » entre deux étapes.
 
 Sans overlay (petite fenêtre, prise en main à distance) :
-- **Pause** : profil de test suivant (dans l'ordre du combo, puis retour à « 0. Référence ») ; le log note
-  `AK-FSR: profil de test : <nom>`.
-- **Impr. écran** : rapport de test ajouté à `ak-fsr-report.txt` et au log (ReShade prend aussi une capture
-  d'écran avec cette touche par défaut, sans gêne).
-- Touches modifiables : `[AK-FSR] ReportKey=44`, `ProfileKey=19` (codes VK, 0 = désactivée).
+- **Alt + Impr. écran** : profil de test suivant (dans l'ordre du combo, puis retour à « 0. Référence ») ;
+  le log note `AK-FSR: profil de test : <nom>`.
+- **Ctrl + Impr. écran** : rapport de test ajouté à `ak-fsr-report.txt` et au log.
+- Touches modifiables : `[AK-FSR] ReportKey=44`, `ReportModifier=17` (Ctrl), `ProfileKey=44`,
+  `ProfileModifier=18` (Alt) ; codes VK, touche 0 = désactivée, modificateur 0 = aucun.
 - Le profil actif est sauvegardé : avant de quitter, revenir à « 0. Référence » (sinon un profil « relancer »
   s'applique au lancement suivant).
 Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
