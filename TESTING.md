@@ -5,6 +5,9 @@ comme la v0.6.3 (Vulkan, insertion `0xB2A276FD`, FSR 3.1). Tester **une option �
 ci-dessous, en repartant de la configuration par défaut entre deux tests.
 
 Réglages : onglet **AK-FSR** de l'overlay, ou section `[AK-FSR]` de `ReShade.ini` (jeu fermé).
+Raccourci : combo **« Profil de test (TESTING.md) »** de l'onglet — applique l'étape choisie (mode FSR,
+une seule option active, autres réglages par défaut ; netteté, vue de debug et touche on/off conservées).
+Les profils marqués « relancer » demandent de redémarrer le jeu. Revenir à « 0. Référence » entre deux étapes.
 Lignes de log : `ReShade.log` dans `Binaries/Win64`, préfixe `AK-FSR:`.
 
 ## 0. Référence (rien activé)

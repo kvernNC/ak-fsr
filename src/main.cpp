@@ -7,6 +7,8 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
+#include <string>
 #include <utility>
 
 #include "exposure.hpp"
@@ -49,6 +51,47 @@ std::filesystem::path module_dir(HMODULE module) {
   wchar_t path[MAX_PATH] = {};
   GetModuleFileNameW(module, path, MAX_PATH);
   return std::filesystem::path(path).parent_path();
+}
+
+
+// Profils de test (TESTING.md) : une étape = une option activée, toutes les autres à leur défaut.
+struct test_profile {
+  const char *name;
+  void (*apply)(akfsr::fsr::settings &);
+};
+const test_profile kTestProfiles[] = {
+    {"0. Référence (défauts)", [](akfsr::fsr::settings &) {}},
+    {"2. M7.2 hautes lumières", [](akfsr::fsr::settings &s) { s.highlights = true; }},
+    {"4. M8.1 insertion au SMAA", [](akfsr::fsr::settings &s) { s.smaa_insertion = true; }},
+    {"5. M8.2 backend DX11", [](akfsr::fsr::settings &s) { s.fsr_backend = akfsr::fsr::backend::dx11; }},
+    {"4+5. M8.1 + M8.2 (budget Deck)", [](akfsr::fsr::settings &s) {
+       s.smaa_insertion = true;
+       s.fsr_backend = akfsr::fsr::backend::dx11;
+     }},
+    {"6. M8.3 vecteurs du jeu (UV)", [](akfsr::fsr::settings &s) { s.game_mv = true; }},
+    {"6. M8.3 vecteurs du jeu ([-1,1])", [](akfsr::fsr::settings &s) {
+       s.game_mv = true;
+       s.game_mv_scale = 1;
+     }},
+    {"7. M8.4 biais de LOD -0.5 (relancer)", [](akfsr::fsr::settings &s) { s.lod_bias = -0.5f; }},
+    {"8-9. M10 FSR 4 pilote (relancer)", [](akfsr::fsr::settings &s) {
+       s.fsr4_driver = true;
+       s.version_id = akfsr::fsr4::kDriverVersionId;
+     }},
+    {"10. M8.5 exposition du jeu", [](akfsr::fsr::settings &s) { s.game_exposure = true; }},
+};
+
+// Garde le mode, la netteté et les options de diagnostic de l'utilisateur ; le reste revient au défaut.
+void apply_test_profile(const test_profile &p) {
+  const auto current = akfsr::insertion::get_fsr_settings();
+  akfsr::fsr::settings s;
+  s.sharpness = current.sharpness;
+  s.debug_view = current.debug_view;
+  p.apply(s);
+  akfsr::insertion::set_fsr_settings(s);
+  akfsr::insertion::set_shader_patches_enabled(true);
+  akfsr::insertion::set_mode(akfsr::insertion::mode::fsr);
+  reshade::log::message(reshade::log::level::info, (std::string("AK-FSR: profil de test : ") + p.name).c_str());
 }
 
 std::filesystem::path g_addon_dir;
@@ -274,6 +317,18 @@ void on_overlay(reshade::api::effect_runtime *) {
   changed |= ImGui::RadioButton("Test : moitié dupliquée", &mode, 2);
   if (changed) akfsr::insertion::set_mode(static_cast<akfsr::insertion::mode>(mode));
   toggle_key_row();
+  {
+    static int profile = 0;
+    ImGui::SetNextItemWidth(260);
+    if (ImGui::BeginCombo("Profil de test (TESTING.md)", kTestProfiles[profile].name)) {
+      for (int i = 0; i < static_cast<int>(std::size(kTestProfiles)); ++i)
+        if (ImGui::Selectable(kTestProfiles[i].name, i == profile)) {
+          profile = i;
+          apply_test_profile(kTestProfiles[i]);
+        }
+      ImGui::EndCombo();
+    }
+  }
 
   auto fsr_settings = akfsr::insertion::get_fsr_settings();
   bool fsr_changed = ImGui::Checkbox("Vue de debug FSR", &fsr_settings.debug_view);
