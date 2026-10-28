@@ -29,8 +29,14 @@ Steam Deck OLED, 1280×800, standing on the starting rooftop, game AA on:
 | Mode | FPS |
 |---|---|
 | Game SMAA only (AK-FSR off) | 65 |
-| **FSR 3.1, DX11 backend, replacing SMAA** (default) | **57** |
+| FSR 3.1, DX11 backend (performance option, see below) | 57 |
+| **FSR 3.1, Vulkan backend** (default) | about 48 (estimated from its measured 5.6 ms cost) |
 | FSR 4 INT8, replacing SMAA | 48 |
+
+- On the Deck, **FSR 4 costs about the same as FSR 3.1 (Vulkan) and looks better**: if you add AMD's driver file
+  (see below), pick FSR 4. A 40 Hz / 40 fps limit in the Deck's performance menu keeps it smooth.
+- The **DX11 backend** (tab option) is cheaper but leaves ghosting trails on moving vegetation. Use it only if you
+  need the extra frames.
 
 ## Requirements
 

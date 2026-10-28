@@ -22,10 +22,11 @@ inline constexpr bool kDefaultSmaaInsertion = false;
 inline constexpr float kDefaultLodBias = 0.0f;
 inline constexpr int kDefaultBackend = 0;  // Vulkan
 #else
-// Backend DX11 : sur le Deck, FSR 3.1 coûte 2,1 ms de plus par frame au lieu de 5,6 ms en Vulkan (27/10/2026).
+// Backend Vulkan (FSR 3.1.4 officiel). Le backend DX11 (portage FSR 3.1.2) coûte moins sur le Deck (2,1 ms au
+// lieu de 5,6 ms, 27/10/2026) mais laisse des traînées sur la végétation en mouvement (constaté le 29/10) : option.
 inline constexpr bool kDefaultSmaaInsertion = true;
 inline constexpr float kDefaultLodBias = -1.0f;
-inline constexpr int kDefaultBackend = 1;  // DX11, repli sur Vulkan si ak-fsr-dx11.dll manque
+inline constexpr int kDefaultBackend = 0;  // Vulkan
 #endif
 
 // Début du CB View copié à chaque frame : c0..c21 (ViewProj courante et précédente, …, c21 = origine du
