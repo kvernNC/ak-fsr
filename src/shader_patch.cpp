@@ -283,6 +283,71 @@ int jitter_projections(program &p, uint32_t slot, uint32_t reg_x, uint32_t reg_y
   return count;
 }
 
+// Pixel shaders qui reconstruisent la position d'un pixel depuis la profondeur (décals, volumes de lumière,
+// masques) : « div rX, vN, vN.wwww » donne le NDC jitteré du pixel, puis une seule instruction
+// « mul rD, rX, cb<s>[k] » le multiplie par l'échelle de dé-projection. Le jitter est retiré juste avant
+// (« add rT, rX, -cb12[0] », même swizzle que l'échelle : x <- jitter x, y <- jitter y) ; sans cela, les
+// coordonnées de texture des décals glissent d'une frame à l'autre. La multiplication du NDC par la
+// résolution (adresse du texel de profondeur, suivie de « ftou ») n'est pas touchée.
+bool jitter_unprojection_ps(program &p) {
+  constexpr uint32_t kOpAdd = 0x00, kOpDiv = 0x0E, kOpMul = 0x38, kOpFtou = 0x1C, kOpDclTemps = 0x68;
+  auto is_v_w = [](uint32_t op) {  // vN.wwww
+    return ((op >> 12) & 0xFF) == 1 && ((op >> 2) & 3) == 1 && ((op >> 4) & 0xFF) == 0xFF && !(op & 0x80000000);
+  };
+  uint32_t ndc_reg = UINT32_MAX, ndc_mask = 0;  // NDC suivi depuis le dernier « div rX, vN, vN.wwww »
+  size_t target = SIZE_MAX, temps_pos = SIZE_MAX;
+  int matches = 0;
+  for (size_t pos = 2; pos < p.tokens.size();) {
+    const uint32_t len = instruction_length(p.tokens, pos);
+    if (len == 0) return false;
+    const uint32_t opcode = p.tokens[pos] & 0x7FF;
+    const uint32_t dst = len > 2 ? p.tokens[pos + 1] : 0;
+    const bool writes_temp = opcode < 0x58 && len > 2 && ((dst >> 12) & 0xFF) == 0 && ((dst >> 20) & 3) == 1;
+    if (opcode == kOpDclTemps) temps_pos = pos;
+    if (opcode == kOpDiv && len == 7 && ((p.tokens[pos + 3] >> 12) & 0xFF) == 1 && is_v_w(p.tokens[pos + 5]) &&
+        writes_temp) {  // le numérateur est l'entrée interpolée elle-même (pas déjà multipliée par la profondeur)
+      ndc_reg = p.tokens[pos + 2];
+      ndc_mask = (dst >> 4) & 0xF;
+    } else if (ndc_reg != UINT32_MAX) {
+      if (opcode == kOpMul && len == 8 && !(p.tokens[pos] & 0x80000000)) {
+        const uint32_t src = p.tokens[pos + 3], cb = p.tokens[pos + 5];
+        uint32_t read = 0;  // composantes du NDC lues
+        for (uint32_t c = 0; c < 4; ++c)
+          if ((dst >> (4 + c)) & 1) read |= 1u << ((src >> (4 + 2 * c)) & 3);
+        const size_t next = pos + len;
+        const bool to_texel = next < p.tokens.size() && (p.tokens[next] & 0x7FF) == kOpFtou;
+        if (writes_temp && ((src >> 12) & 0xFF) == 0 && ((src >> 2) & 3) == 1 && !(src & 0x80000000) &&
+            p.tokens[pos + 4] == ndc_reg && (read & ~ndc_mask) == 0 && ((cb >> 12) & 0xFF) == 8 &&
+            ((cb >> 20) & 3) == 2 && ((cb >> 2) & 3) == 1 && !(cb & 0x80000000)) {
+          if (!to_texel) {
+            target = pos;
+            ++matches;
+          }
+          ndc_reg = UINT32_MAX;  // seule la première multiplication du NDC compte
+        }
+      }
+      if (ndc_reg != UINT32_MAX && writes_temp && p.tokens[pos + 2] == ndc_reg && (((dst >> 4) & 0xF) & ndc_mask))
+        ndc_reg = UINT32_MAX;  // NDC écrasé
+    }
+    pos += len;
+  }
+  if (matches != 1 || temps_pos == SIZE_MAX) return false;
+  const uint32_t temp = p.tokens[temps_pos + 1]++;
+  const uint32_t dst = p.tokens[target + 1], src = p.tokens[target + 3], cb = p.tokens[target + 5];
+  const uint32_t mask = (dst >> 4) & 0xF;
+  const uint32_t add[] = {kOpAdd | (9u << 24),
+                          0x00100002u | (mask << 4), temp,                   // rT.<masque>
+                          src, p.tokens[target + 4],                         // NDC (swizzle d'origine)
+                          cb | 0x80000000u,                                  // -cb12[0].<swizzle de l'échelle>
+                          0x41, kJitterCbSlot, 0};
+  // la multiplication lit rT avec le même masque (swizzle identité)
+  p.tokens[target + 3] = (src & ~(0xFFu << 4)) | (0xE4u << 4);
+  p.tokens[target + 4] = temp;
+  p.tokens.insert(p.tokens.begin() + static_cast<ptrdiff_t>(target), std::begin(add), std::end(add));
+  p.tokens[1] = static_cast<uint32_t>(p.tokens.size());
+  return true;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Table des patchs.
 
@@ -324,8 +389,14 @@ const std::vector<patch_entry> &table() {
   return kTable;
 }
 
+// Compute shaders où cb0[6].x / cb0[7].y n'est pas l'échelle de projection de la vue (volumes, grilles) :
+// la règle générale les trouverait à tort.
+const std::set<uint32_t> kCsExcluded = {0x354E19A3, 0x207E66FA, 0x1660CF5B, 0x5E64DE42, 0xC2A67DDB,
+                                        0xF8676992, 0x33566787, 0xA8253F51, 0x8411F20C};
+
 std::mutex g_mutex;
 std::set<uint32_t> g_patched;
+uint32_t g_ps_patched = 0;  // pixel shaders patchés par la règle générale
 
 }  // namespace
 
@@ -333,10 +404,33 @@ bool patch(uint32_t hash, const uint8_t *code, size_t size, std::vector<uint8_t>
   const patch_entry *entry = nullptr;
   for (const auto &e : table())
     if (e.hash == hash) entry = &e;
-  if (entry == nullptr) return false;
-
   char buf[192];
   program p;
+  if (entry == nullptr) {
+    // Règles générales : pixel shaders (type 0), dé-projection unique depuis vN / vN.w ; compute shaders
+    // (type 5), projections par l'échelle cb0[6].x / cb0[7].y.
+    if (!load(code, size, p)) return false;
+    const uint32_t type = p.tokens[0] >> 16;
+    int sites = 0;
+    if (type == 0)
+      sites = jitter_unprojection_ps(p) ? 1 : 0;
+    else if (type == 5 && !kCsExcluded.count(hash))
+      sites = jitter_projections(p, 0, 6, 7);
+    if (sites == 0 || !add_cb_declaration(p, kJitterCbSlot, 1)) return false;
+    if (type == 5) {
+      std::snprintf(buf, sizeof(buf), "AK-FSR: compute shader 0x%08X : %d projection(s) corrigée(s)", hash, sites);
+      reshade::log::message(reshade::log::level::info, buf);
+    }
+    rebuild(p, out);
+    std::lock_guard lock(g_mutex);
+    g_patched.insert(hash);
+    if (++g_ps_patched % 250 == 1) {
+      std::snprintf(buf, sizeof(buf), "AK-FSR: %u pixel shader(s) à dé-projection corrigée (dernier 0x%08X)",
+                    g_ps_patched, hash);
+      reshade::log::message(reshade::log::level::info, buf);
+    }
+    return true;
+  }
   bool ok = load(code, size, p);
   for (const auto &r : entry->retargets) {
     if (!ok) break;
