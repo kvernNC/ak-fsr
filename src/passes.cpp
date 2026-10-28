@@ -185,6 +185,8 @@ void bind_jitter_cb(device *dev, command_list *cmd) {
     if (g_view_valid) {
       float jx, jy;
       jitter::recover_from_view(g_view_head.data(), jx, jy);
+      jitter[0] = jx;  // NDC, comme dans la matrice (projections du SSAO)
+      jitter[1] = jy;
       jitter[2] = jx * static_cast<float>(w) * 0.5f;   // même convention que le jitter transmis à FSR
       jitter[3] = -jy * static_cast<float>(h) * 0.5f;
     }

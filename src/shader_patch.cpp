@@ -213,6 +213,76 @@ void rebuild(program &p, std::vector<uint8_t> &out) {
   dxbc_checksum(out);
 }
 
+// Projections rendues sensibles au jitter. La profondeur est rendue avec la projection jitterée (NDC décalé de
+// j) mais le shader passe pixel <-> vue avec la seule échelle cb<slot>[reg_x].x / cb<slot>[reg_y].y :
+//   « div d.c, ndc.c', échelle » (pixel -> vue) : le NDC lu est d'abord diminué du jitter (nouveau registre) ;
+//   « mul d.c, vue.c', échelle » (vue -> pixel) : le jitter est ajouté au résultat.
+// Le jitter NDC est lu en kJitterCbSlot[0].xy. Retourne le nombre d'instructions corrigées (0 : forme inattendue).
+int jitter_projections(program &p, uint32_t slot, uint32_t reg_x, uint32_t reg_y) {
+  constexpr uint32_t kOpAdd = 0x00, kOpDiv = 0x0E, kOpMul = 0x38, kOpDclTemps = 0x68;
+  // Registre temporaire supplémentaire.
+  size_t temps_pos = SIZE_MAX;
+  for (size_t pos = 2; pos < p.tokens.size();) {
+    const uint32_t len = instruction_length(p.tokens, pos);
+    if (len == 0) return 0;
+    if ((p.tokens[pos] & 0x7FF) == kOpDclTemps) temps_pos = pos;
+    pos += len;
+  }
+  if (temps_pos == SIZE_MAX) return 0;
+  const uint32_t temp = p.tokens[temps_pos + 1]++;
+
+  auto temp_source = [](uint32_t op) {  // rN.c, sans modificateur
+    return ((op >> 12) & 0xFF) == 0 && ((op >> 20) & 3) == 1 && ((op >> 2) & 3) == 2 && !(op & 0x80000000);
+  };
+  auto jitter_operand = [](uint32_t component, bool negate, std::vector<uint32_t> &out) {
+    out.push_back(0x0020800Au | (component << 4) | (negate ? 0x80000000u : 0));  // cb[slot][reg].c
+    if (negate) out.push_back(0x41);                                             // modificateur : négation
+    out.push_back(kJitterCbSlot);
+    out.push_back(0);
+  };
+  int count = 0;
+  for (size_t pos = 2; pos < p.tokens.size();) {
+    const uint32_t len = instruction_length(p.tokens, pos);
+    const uint32_t opcode = p.tokens[pos] & 0x7FF;
+    if (len == 8 && (opcode == kOpDiv || opcode == kOpMul) && !(p.tokens[pos] & 0x80000000)) {
+      const uint32_t dst = p.tokens[pos + 1], src = p.tokens[pos + 3], cb = p.tokens[pos + 5];
+      const bool cb_scalar = ((cb >> 12) & 0xFF) == 8 && ((cb >> 20) & 3) == 2 && ((cb >> 2) & 3) == 2 &&
+                             !(cb & 0x80000000) && p.tokens[pos + 6] == slot;
+      const uint32_t reg = p.tokens[pos + 7], comp = (cb >> 4) & 3;
+      const bool scale = cb_scalar && ((reg == reg_x && comp == 0) || (reg == reg_y && comp == 1));
+      const bool dst_single = ((dst >> 12) & 0xFF) == 0 && ((dst >> 2) & 3) == 0 && !(dst & 0x80000000);
+      if (scale && dst_single && temp_source(src)) {
+        std::vector<uint32_t> add;
+        if (opcode == kOpDiv) {
+          // add rT.c', src, -jitter ; la division lit rT.c'.
+          const uint32_t c = (src >> 4) & 3;
+          add = {0, 0x00100002u | (1u << (4 + c)), temp, src, p.tokens[pos + 4]};
+          jitter_operand(comp, true, add);
+          add[0] = kOpAdd | (static_cast<uint32_t>(add.size()) << 24);
+          p.tokens[pos + 4] = temp;
+          p.tokens.insert(p.tokens.begin() + static_cast<ptrdiff_t>(pos), add.begin(), add.end());
+        } else {
+          // add d.c, d.c, jitter, après la multiplication.
+          uint32_t c = 0;
+          while (c < 4 && !((dst >> (4 + c)) & 1)) ++c;
+          if (c == 4 || ((dst >> 4) & 0xF) != (1u << c)) return 0;
+          add = {0, dst, p.tokens[pos + 2], 0x0010000Au | (c << 4), p.tokens[pos + 2]};
+          jitter_operand(comp, false, add);
+          add[0] = kOpAdd | (static_cast<uint32_t>(add.size()) << 24);
+          p.tokens.insert(p.tokens.begin() + static_cast<ptrdiff_t>(pos + len), add.begin(), add.end());
+        }
+        ++count;
+        pos += len + add.size();
+        continue;
+      }
+    }
+    if (len == 0) return 0;
+    pos += len;
+  }
+  p.tokens[1] = static_cast<uint32_t>(p.tokens.size());
+  return count;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Table des patchs.
 
@@ -225,15 +295,31 @@ struct patch_entry {
   uint32_t hash;
   const char *name;
   std::vector<cb_retarget> retargets;  // chaque opérande lit kJitterCbSlot[0] à la place
+  int projections = 0;                  // nombre attendu de projections cb0[6].x / cb0[7].y à corriger
 };
 
 // 0xA124DE12 : éclairage différé par tuiles. Instruction 77 « add r7.xy, r6.zw, -cb0[12].zw » : passage
 // pixel -> NDC pour la reconstruction de la position vue (avant « div r7.x, r0.x, cb0[6].x » …) ; cb0[12].zw
 // (origine de la zone d'affichage, nulle) devient le jitter en pixels. Les adresses de texels (instructions
 // 20 et 23) gardent cb0[12].zw.
+//
+// 0x0E7C20A1 : occlusion ambiante (SSAO). Chaque échantillon fait l'aller-retour pixel -> vue -> pixel avec
+// la seule échelle de projection : sans le jitter, les échantillons tombent à côté d'une quantité qui dépend
+// de la phase et de la distance, et des zones de mur s'éclaircissent une frame sur 8 (scintillement).
+//
+// 0xFE8D7315, 0x816CB5D7 : composition de l'éclairage (deux variantes). La direction de vue de chaque pixel
+// est reconstruite par la même dé-projection : sans le jitter, le haut des murs s'éclaircit sur certaines phases.
+//
+// 0xECE88095, 0x707DD08A : filtrage bilatéral de l'éclairage (deux passes) ; la position des voisins est
+// reconstruite par dé-projection (6 sites chacun).
 const std::vector<patch_entry> &table() {
   static const std::vector<patch_entry> kTable = {
       {0xA124DE12, "éclairage différé (reconstruction de la position)", {{77, 0, 12}}},
+      {0x0E7C20A1, "occlusion ambiante (projections des échantillons)", {}, 146},
+      {0xFE8D7315, "composition de l'éclairage (direction de vue)", {}, 2},
+      {0x816CB5D7, "composition de l'éclairage, variante (direction de vue)", {}, 2},
+      {0xECE88095, "filtrage de l'éclairage, passe 1 (positions des voisins)", {}, 6},
+      {0x707DD08A, "filtrage de l'éclairage, passe 2 (positions des voisins)", {}, 6},
   };
   return kTable;
 }
@@ -257,6 +343,7 @@ bool patch(uint32_t hash, const uint8_t *code, size_t size, std::vector<uint8_t>
     const size_t pos = find_instruction(p, r.instruction);
     ok = pos != SIZE_MAX && retarget_cb(p, pos, r.old_slot, r.old_reg, kJitterCbSlot, 0);
   }
+  if (ok && entry->projections > 0) ok = jitter_projections(p, 0, 6, 7) == entry->projections;
   ok = ok && add_cb_declaration(p, kJitterCbSlot, 1);
   if (!ok) {
     std::snprintf(buf, sizeof(buf), "AK-FSR: patch 0x%08X (%s) : forme inattendue, shader laissé intact", hash,
