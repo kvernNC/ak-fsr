@@ -105,11 +105,14 @@ bool skip_smaa_draw() {
   return true;
 }
 
+void bind_jitter_cb(device *dev, command_list *cmd, bool pixel_shader);  // M6, voir plus bas
+
 bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t, uint32_t) {
   if (!is_immediate(cmd)) {
     explorer::on_deferred_draw();
     return false;
   }
+  if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
   return skip_smaa_draw() || hidden;
 }
@@ -124,6 +127,7 @@ bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, ui
     explorer::on_deferred_draw();
     return false;
   }
+  if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
   return skip_smaa_draw() || hidden;
 }
@@ -167,7 +171,7 @@ void note_view_cb(device *dev) {
 std::atomic<bool> g_patches_enabled{true};
 ID3D11Buffer *g_jitter_cb = nullptr;
 
-void bind_jitter_cb(device *dev, command_list *cmd) {
+void bind_jitter_cb(device *dev, command_list *cmd, bool pixel_shader) {
   auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
   if (g_jitter_cb == nullptr) {
     D3D11_BUFFER_DESC desc{16, D3D11_USAGE_DYNAMIC, D3D11_BIND_CONSTANT_BUFFER, D3D11_CPU_ACCESS_WRITE, 0, 0};
@@ -185,6 +189,8 @@ void bind_jitter_cb(device *dev, command_list *cmd) {
     if (g_view_valid) {
       float jx, jy;
       jitter::recover_from_view(g_view_head.data(), jx, jy);
+      jitter[0] = jx;  // NDC, comme dans la matrice (projections du SSAO)
+      jitter[1] = jy;
       jitter[2] = jx * static_cast<float>(w) * 0.5f;   // même convention que le jitter transmis à FSR
       jitter[3] = -jy * static_cast<float>(h) * 0.5f;
     }
@@ -193,7 +199,10 @@ void bind_jitter_cb(device *dev, command_list *cmd) {
   if (FAILED(ctx->Map(g_jitter_cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
   std::memcpy(mapped.pData, jitter, sizeof(jitter));
   ctx->Unmap(g_jitter_cb, 0);
-  ctx->CSSetConstantBuffers(shader_patch::kJitterCbSlot, 1, &g_jitter_cb);
+  if (pixel_shader)
+    ctx->PSSetConstantBuffers(shader_patch::kJitterCbSlot, 1, &g_jitter_cb);
+  else
+    ctx->CSSetConstantBuffers(shader_patch::kJitterCbSlot, 1, &g_jitter_cb);
 }
 
 uint64_t previous_velocity() {
@@ -291,7 +300,7 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   if (explorer::on_dispatch(g_cs.hash)) return true;  // diagnostic : dispatch masqué
   if (g_cs.hash == 0) return false;
   device *dev = cmd->get_device();
-  if (shader_patch::needs_jitter_cb(g_cs.hash)) bind_jitter_cb(dev, cmd);
+  if (shader_patch::needs_jitter_cb(g_cs.hash)) bind_jitter_cb(dev, cmd, false);
   if (g_cs.hash == kInsertionCs) {
     g_current.insertion = true;
     explorer::on_insertion();
