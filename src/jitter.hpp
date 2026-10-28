@@ -16,6 +16,9 @@ void uninstall();
 void set_enabled(bool enabled);                       // jitter actif (mode FSR + option)
 void set_render_size(uint32_t width, uint32_t height);  // conversion pixels -> NDC
 void on_present();                                    // avance dans la séquence
+void force_phase(int phase);                          // diagnostic : phase figée, -1 : séquence normale
+void set_scale(float scale);                          // diagnostic : amplitude du jitter (1 = normale)
+void force_offset(float x, float y);                  // diagnostic : décalage imposé en pixels (annulé par force_phase)
 
 // Apprentissage de la vue principale : projection déduite du CB View de la frame rendue.
 void learn_main_view(float scale_x, float scale_y, float near_plane);

@@ -63,6 +63,10 @@ from AMD's official FidelityFX SDK 2.3) are included.
 
 - Rain is not excluded from the AA (minor softening of rain streaks).
 - The game's `ScreenPercentage` setting breaks the image (game bug): AK-FSR does not upscale.
+- **Surface shimmer.** On many surfaces, especially wet walls up close and while moving, texture detail
+  can wobble or shimmer. The game's own image already shows a little of it in some places; AK-FSR makes it
+  more visible. Edges are much cleaner than with SMAA, but this is a different kind of instability. Under
+  investigation; the other temporal AA mods for this game (DLAA, Luma) behave the same on the tested wall.
 - Single-player game, no anti-cheat; still, it is a mod that hooks the renderer: use at your own risk.
 
 ## Archive content
