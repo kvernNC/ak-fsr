@@ -59,14 +59,18 @@ FSR 4 uses AMD's driver library, which **cannot be redistributed** and is not in
 The two AMD SDK files in `ak-fsr/` (`amd_fidelityfx_loader_vk.dll`, `amd_fidelityfx_upscaler_vk.dll`, MIT licence,
 from AMD's official FidelityFX SDK 2.3) are included.
 
+## How it handles the game's shaders
+
+Temporal AA needs a sub-pixel camera offset (jitter) every frame. Batman: Arkham Knight was never made for it:
+about 2,100 of its shaders (decals, light volumes, ambient occlusion, lighting) rebuild 3D positions from the
+screen without accounting for that offset, which makes textures and patches of light shimmer on many surfaces.
+AK-FSR rewrites those shaders in memory when the game creates them so they take the jitter into account. Game
+files are not modified.
+
 ## Known limitations
 
 - Rain is not excluded from the AA (minor softening of rain streaks).
 - The game's `ScreenPercentage` setting breaks the image (game bug): AK-FSR does not upscale.
-- **Surface shimmer.** On many surfaces, especially wet walls up close and while moving, texture detail
-  can wobble or shimmer. The game's own image already shows a little of it in some places; AK-FSR makes it
-  more visible. Edges are much cleaner than with SMAA, but this is a different kind of instability. Under
-  investigation; the other temporal AA mods for this game (DLAA, Luma) behave the same on the tested wall.
 - Single-player game, no anti-cheat; still, it is a mod that hooks the renderer: use at your own risk.
 
 ## Archive content
