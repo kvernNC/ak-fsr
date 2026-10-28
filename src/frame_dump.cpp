@@ -35,6 +35,7 @@ struct shader_info {
 
 std::shared_mutex g_shaders_mutex;
 std::unordered_map<uint64_t, shader_info> g_shaders;
+std::unordered_map<uint64_t, std::string> g_blends;  // état de mélange (D3D11 : objet à part) -> description de RT0
 
 // create_pipeline voit le bytecode avant un éventuel remplacement par RenoDX (chargé après nous,
 // ordre alphabétique) ; init_pipeline reçoit le handle. On fait le lien par thread.
@@ -89,6 +90,16 @@ bool on_create_pipeline(device *, pipeline_layout, uint32_t count, const pipelin
 }
 
 void on_init_pipeline(device *, pipeline_layout, uint32_t count, const pipeline_subobject *subobjects, pipeline handle) {
+  for (uint32_t i = 0; i < count; ++i) {
+    if (subobjects[i].type != pipeline_subobject_type::blend_state || subobjects[i].data == nullptr) continue;
+    const auto &b = *static_cast<const blend_desc *>(subobjects[i].data);
+    char buf[96];
+    std::snprintf(buf, sizeof(buf), "blend=%d src=%d dst=%d op=%d mask=0x%X", b.blend_enable[0] ? 1 : 0,
+                  static_cast<int>(b.source_color_blend_factor[0]), static_cast<int>(b.dest_color_blend_factor[0]),
+                  static_cast<int>(b.color_blend_op[0]), static_cast<unsigned>(b.render_target_write_mask[0]));
+    std::unique_lock lock(g_shaders_mutex);
+    g_blends[handle.handle] = buf;
+  }
   auto shaders = t_pending_shaders.empty() ? read_shaders(count, subobjects) : std::move(t_pending_shaders);
   t_pending_shaders.clear();
   if (shaders.size() != 1 || handle.handle == 0) return;  // D3D11 : un shader par objet
@@ -136,11 +147,12 @@ struct cmd_state {
   std::array<uint64_t, kRtvSlots> rtv{};
   uint32_t rtv_count = 0;
   uint64_t dsv = 0;
+  uint64_t blend = 0;
   std::vector<std::string> lines;
 
   void reset_bindings() {
     vs = {}; ps = {}; cs = {};
-    rtv = {}; rtv_count = 0; dsv = 0;
+    rtv = {}; rtv_count = 0; dsv = 0; blend = 0;
   }
 };
 
@@ -319,6 +331,11 @@ void log_draw_like(command_list *cmd, const char *what, const std::string &args,
       line += "\n    RT" + std::to_string(i) + " " + describe_view(dev, st.rtv[i]);
     }
     if (st.dsv != 0) line += "\n    DS " + describe_view(dev, st.dsv);
+    {
+      std::shared_lock lock(g_shaders_mutex);
+      const auto it = g_blends.find(st.blend);
+      line += "\n    OM " + (it != g_blends.end() ? it->second : std::string("blend=défaut"));
+    }
     append_stage(line, dev, "VS", st.vs, false);
     append_stage(line, dev, "PS", st.ps, true);
   }
@@ -331,6 +348,7 @@ void on_bind_pipeline(command_list *cmd, pipeline_stage stages, pipeline p) {
   if ((stages & pipeline_stage::vertex_shader) != 0) st.vs.shader = p.handle;
   if ((stages & pipeline_stage::pixel_shader) != 0) st.ps.shader = p.handle;
   if ((stages & pipeline_stage::compute_shader) != 0) st.cs.shader = p.handle;
+  if ((stages & pipeline_stage::output_merger) != 0) st.blend = p.handle;
 }
 
 void on_push_descriptors(command_list *cmd, shader_stage stages, pipeline_layout, uint32_t,
