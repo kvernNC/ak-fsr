@@ -88,4 +88,5 @@ Not included: `amdvkffx64.dll` (AMD proprietary driver file).
 
 ReShade (crosire), RenoDX (clshortfuse), Luma Framework (Filippo Tarpini and contributors: ideas and DX11
 FidelityFX build), AMD FidelityFX SDK, DXVK. Method inspired by the "Native DLSS Anti Aliasing for Arkham Knight"
-mod (Zorkanne33); no code or files from it. Source: github.com/kvernNC/ak-fsr.
+mod (Zorkanne33); no code or files from it. Its debug log helped identify which game shaders need
+the jitter correction; AK-FSR's rewriting rules and code are its own. Source: github.com/kvernNC/ak-fsr.
