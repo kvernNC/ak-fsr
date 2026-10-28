@@ -24,6 +24,7 @@ add_library(ak-fsr SHARED
   src/shader_explorer.cpp
   src/exposure.cpp
   src/highlights.cpp
+  src/rain.cpp
   src/fsr_dx11.cpp
   src/lod_bias.cpp
   src/detour.cpp

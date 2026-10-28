@@ -47,6 +47,7 @@ struct settings {
   bool object_velocity = true;  // vélocité des objets du G-buffer (RT4, M5)
   bool highlights = false;        // M7 : hautes lumières sorties de FSR puis rajoutées
   float highlight_threshold = 8.0f;  // seuil sur la composante max (couleur HDR linéaire)
+  bool rain_after_fsr = true;        // M7.3 : éclaboussures de pluie dessinées à part, composées après FSR
   bool smaa_insertion = kDefaultSmaaInsertion;  // M8.1 : FSR à la place du SMAA du jeu (repli sur 0xB2A276FD)
   backend fsr_backend = static_cast<backend>(kDefaultBackend);  // M8.2
   // M8.3 : vélocité du G-buffer (RT4) passée telle quelle à FSR, sans reprojection (jitter annulé par FSR).

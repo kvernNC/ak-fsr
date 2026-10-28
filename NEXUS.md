@@ -69,7 +69,8 @@ files are not modified.
 
 ## Known limitations
 
-- Rain is not excluded from the AA (minor softening of rain streaks).
+- Rain splashes on the ground are drawn after FSR so they are kept intact (option "Rain after FSR", on by
+  default). The falling rain streaks still go through FSR and can look slightly softer.
 - The game's `ScreenPercentage` setting breaks the image (game bug): AK-FSR does not upscale.
 - Single-player game, no anti-cheat; still, it is a mod that hooks the renderer: use at your own risk.
 

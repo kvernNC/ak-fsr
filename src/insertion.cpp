@@ -7,6 +7,7 @@
 #include "exposure.hpp"
 #include "fsr_dx11.hpp"
 #include "highlights.hpp"
+#include "rain.hpp"
 #include "jitter.hpp"
 #include "lod_bias.hpp"
 #include "passes.hpp"
@@ -26,6 +27,7 @@ fsr::settings g_fsr_settings;
 
 void on_destroy_device(device *) {
   highlights::shutdown();
+  rain::shutdown();
   fsr::dx11::shutdown();
   exposure::shutdown();
   vk::shutdown();
@@ -46,6 +48,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::set_config_value(nullptr, kSection, "ToggleKey", g_toggle_key.load());
   reshade::set_config_value(nullptr, kSection, "Highlights", s.highlights);
+  reshade::set_config_value(nullptr, kSection, "RainAfterFsr", s.rain_after_fsr);
   reshade::set_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
   reshade::set_config_value(nullptr, kSection, "Backend", static_cast<int>(s.fsr_backend));
   reshade::set_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
@@ -74,6 +77,7 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::get_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
   reshade::get_config_value(nullptr, kSection, "Highlights", s.highlights);
+  reshade::get_config_value(nullptr, kSection, "RainAfterFsr", s.rain_after_fsr);
   reshade::get_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
   int backend = 0;
   reshade::get_config_value(nullptr, kSection, "Backend", backend);
@@ -149,6 +153,7 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     const bool ok = fsr::run(in, s);  // les échecs sont journalisés par fsr
     // Aussi après un échec : la couleur d'entrée retrouve ses hautes lumières.
     if (split) highlights::reinject(native, imm, ok && in.output != nullptr ? in.output : color);
+    rain::composite(native, imm, ok && in.output != nullptr ? in.output : color);  // aussi après un échec
     return ok;
   }
 

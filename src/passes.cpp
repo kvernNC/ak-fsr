@@ -9,6 +9,7 @@
 #include "frame_dump.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
+#include "rain.hpp"
 #include "shader_explorer.hpp"
 #include "shader_patch.hpp"
 
@@ -122,13 +123,20 @@ bool on_indirect(command_list *cmd, indirect_command type, resource, uint64_t, u
   return explorer::on_draw(g_ps.hash, 0, true);
 }
 
-bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, uint32_t, int32_t, uint32_t) {
+bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, uint32_t first_index,
+                     int32_t vertex_offset, uint32_t first_instance) {
   if (!is_immediate(cmd)) {
     explorer::on_deferred_draw();
     return false;
   }
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
+  if (!hidden && rain::is_rain_shader(g_ps.hash) && insertion::fsr_active() &&
+      insertion::get_fsr_settings().rain_after_fsr &&
+      rain::redirect(reinterpret_cast<ID3D11Device *>(cmd->get_device()->get_native()),
+                     reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), indices, instances, first_index,
+                     vertex_offset, first_instance))
+    return true;  // dessiné dans la couche de pluie
   return skip_smaa_draw() || hidden;
 }
 
@@ -401,6 +409,7 @@ void on_destroy_resource(device *, resource res) {
 void on_present(command_queue *queue, swapchain *, const rect *, const rect *, uint32_t, const rect *) {
   g_immediate = queue->get_immediate_command_list();
   explorer::on_present();
+  rain::end_frame();
   {
     std::lock_guard lock(g_report_mutex);
     ++g_report.frames;
