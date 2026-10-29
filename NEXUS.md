@@ -86,7 +86,8 @@ files are not modified.
 |---|---|---|
 | `ak-fsr.addon64` | the add-on | MIT |
 | `amd_fidelityfx_vk.dll` | AMD FidelityFX SDK 1.1.4 (FSR 3.1, Vulkan) | MIT (AMD) |
-| `ak-fsr-dx11.dll` | FSR 3.1 DX11 backend (AMD FidelityFX libraries, built by Luma Framework) | MIT |
+| `ak-fsr-dx11.dll` | FSR 3.1 DX11 backend (bridge to the FidelityFX DX11 libraries below) | MIT |
+| `ffx_backend_dx11_x64.dll`, `ffx_fsr3upscaler_x64.dll` | AMD FidelityFX FSR 3.1.2 for DX11, fixed port by gameplug-labs | MIT |
 | `ak-fsr/amd_fidelityfx_*_vk.dll` | AMD FidelityFX SDK 2.3 signed DLLs, renamed | MIT (AMD) |
 
 Not included: `amdvkffx64.dll` (AMD proprietary driver file).

@@ -12,6 +12,9 @@ cmake --build "$build" >/dev/null
 rm -rf "$out" && mkdir -p "$out/Binaries/Win64/ak-fsr"
 cp "$build/ak-fsr.addon64" "$build/amd_fidelityfx_vk.dll" "$out/Binaries/Win64/"
 if [[ -f "$build/ak-fsr-dx11.dll" ]]; then cp "$build/ak-fsr-dx11.dll" "$out/Binaries/Win64/"; fi
+for dll in ffx_backend_dx11_x64.dll ffx_fsr3upscaler_x64.dll; do  # backend DX11 gameplug-labs, s'il est utilisé
+  if [[ -f "$build/$dll" ]]; then cp "$build/$dll" "$out/Binaries/Win64/"; fi
+done
 signed="$root/third_party/ffx-signed"
 cp "$signed/amd_fidelityfx_loader_dx12.dll" "$out/Binaries/Win64/ak-fsr/amd_fidelityfx_loader_vk.dll"
 cp "$signed/amd_fidelityfx_upscaler_dx12.dll" "$out/Binaries/Win64/ak-fsr/amd_fidelityfx_upscaler_vk.dll"

@@ -16,3 +16,4 @@ build-*/
 deck-package/
 dist/
 .claude/
+third_party/ffx-dx11-gameplug/
