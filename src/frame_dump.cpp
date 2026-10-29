@@ -35,7 +35,7 @@ struct shader_info {
 
 std::shared_mutex g_shaders_mutex;
 std::unordered_map<uint64_t, shader_info> g_shaders;
-std::unordered_map<uint64_t, std::string> g_blends;  // état de mélange (D3D11 : objet à part) -> description de RT0
+std::unordered_map<uint64_t, blend_rt0> g_blends;  // état de mélange (D3D11 : objet à part) -> cible 0
 
 // create_pipeline voit le bytecode avant un éventuel remplacement par RenoDX (chargé après nous,
 // ordre alphabétique) ; init_pipeline reçoit le handle. On fait le lien par thread.
@@ -93,12 +93,11 @@ void on_init_pipeline(device *, pipeline_layout, uint32_t count, const pipeline_
   for (uint32_t i = 0; i < count; ++i) {
     if (subobjects[i].type != pipeline_subobject_type::blend_state || subobjects[i].data == nullptr) continue;
     const auto &b = *static_cast<const blend_desc *>(subobjects[i].data);
-    char buf[96];
-    std::snprintf(buf, sizeof(buf), "blend=%d src=%d dst=%d op=%d mask=0x%X", b.blend_enable[0] ? 1 : 0,
-                  static_cast<int>(b.source_color_blend_factor[0]), static_cast<int>(b.dest_color_blend_factor[0]),
-                  static_cast<int>(b.color_blend_op[0]), static_cast<unsigned>(b.render_target_write_mask[0]));
+    const blend_rt0 rt{b.blend_enable[0], static_cast<int>(b.source_color_blend_factor[0]),
+                       static_cast<int>(b.dest_color_blend_factor[0]), static_cast<int>(b.color_blend_op[0]),
+                       static_cast<uint32_t>(b.render_target_write_mask[0])};
     std::unique_lock lock(g_shaders_mutex);
-    g_blends[handle.handle] = buf;
+    g_blends[handle.handle] = rt;
   }
   auto shaders = t_pending_shaders.empty() ? read_shaders(count, subobjects) : std::move(t_pending_shaders);
   t_pending_shaders.clear();
@@ -334,7 +333,11 @@ void log_draw_like(command_list *cmd, const char *what, const std::string &args,
     {
       std::shared_lock lock(g_shaders_mutex);
       const auto it = g_blends.find(st.blend);
-      line += "\n    OM " + (it != g_blends.end() ? it->second : std::string("blend=défaut"));
+      char buf[96] = "blend=défaut";
+      if (it != g_blends.end())
+        std::snprintf(buf, sizeof(buf), "blend=%d src=%d dst=%d op=%d mask=0x%X", it->second.enable ? 1 : 0,
+                      it->second.src, it->second.dst, it->second.op, static_cast<unsigned>(it->second.mask));
+      line += std::string("\n    OM ") + buf;
     }
     append_stage(line, dev, "VS", st.vs, false);
     append_stage(line, dev, "PS", st.ps, true);
@@ -695,6 +698,14 @@ void request_capture() {
   phase expected = phase::idle;
   if (g_phase.compare_exchange_strong(expected, phase::armed))
     reshade::log::message(reshade::log::level::info, "AK-FSR: capture de frame demandée");
+}
+
+bool blend_of(uint64_t pipeline_handle, blend_rt0 &out) {
+  std::shared_lock lock(g_shaders_mutex);
+  const auto it = g_blends.find(pipeline_handle);
+  if (it == g_blends.end()) return false;
+  out = it->second;
+  return true;
 }
 
 uint32_t shader_hash(uint64_t pipeline_handle) {

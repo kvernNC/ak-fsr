@@ -247,6 +247,8 @@ void on_overlay(reshade::api::effect_runtime *) {
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR", &fsr_settings.highlights);
   ImGui::SameLine();
   fsr_changed |= ImGui::Checkbox("Pluie après FSR", &fsr_settings.rain_after_fsr);
+  ImGui::SameLine();
+  fsr_changed |= ImGui::Checkbox("Effets transparents après FSR", &fsr_settings.translucent_after_fsr);
   if (fsr_settings.highlights) {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(160);

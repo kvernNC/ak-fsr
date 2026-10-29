@@ -335,6 +335,10 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     }
   } else if (cmd == "phase") {  // diagnostic : jitter figé sur une phase (0..7), -1 : séquence normale
     akfsr::jitter::force_phase(std::atoi(arg.c_str()));
+  } else if (cmd == "rain" || cmd == "translucent") {  // diagnostic : 0 / 1 (M7.3)
+    auto s = akfsr::insertion::get_fsr_settings();
+    (cmd == "rain" ? s.rain_after_fsr : s.translucent_after_fsr) = std::atoi(arg.c_str()) != 0;
+    akfsr::insertion::set_fsr_settings(s);
   } else if (cmd == "jitterscale") {  // diagnostic : amplitude du jitter
     akfsr::jitter::set_scale(static_cast<float>(std::atof(arg.c_str())));
   } else if (cmd == "offset") {  // diagnostic : jitter figé sur un décalage « x y » en pixels
