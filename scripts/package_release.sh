@@ -18,6 +18,11 @@ done
 signed="$root/third_party/ffx-signed"
 cp "$signed/amd_fidelityfx_loader_dx12.dll" "$out/Binaries/Win64/ak-fsr/amd_fidelityfx_loader_vk.dll"
 cp "$signed/amd_fidelityfx_upscaler_dx12.dll" "$out/Binaries/Win64/ak-fsr/amd_fidelityfx_upscaler_vk.dll"
+sdk24="$root/third_party/ffx-sdk24"  # SDK FSR 2.4.0 Vulkan (FSR 3.1.6 + FSR 4 sans DLL du pilote), s'il est présent
+if [[ -f "$sdk24/amd_fidelityfx_loader_vk.dll" ]]; then
+  mkdir -p "$out/Binaries/Win64/ak-fsr/sdk"
+  cp "$sdk24"/amd_fidelityfx_*_vk.dll "$out/Binaries/Win64/ak-fsr/sdk/"
+fi
 cp "$root/NEXUS.md" "$out/README-AK-FSR.md"
 cp "$root/LICENSE" "$out/LICENSE-AK-FSR.txt"
 if find "$out" -iname 'amdvkffx64.dll' -o -iname 'amdxcffx64.dll' | grep -q .; then

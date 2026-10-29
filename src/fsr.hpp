@@ -85,6 +85,7 @@ struct info {
   std::string status;
   std::string provider;                                 // version effectivement utilisée
   std::vector<std::pair<uint64_t, std::string>> versions;  // versions présentes dans la DLL
+  bool sdk = false;  // versions fournies par le SDK FSR 2.4 (FSR 4 sans la DLL du pilote)
   float fov_deg = 0, near_plane = 0;  // déduits de la matrice, pour vérification
   float jitter_px_x = 0, jitter_px_y = 0;  // jitter relu dans le CB View (pixels), transmis à FSR
   float prev_mismatch = -1;                // écart max entre ViewProj précédente du CB et mémorisée (-1 : n/a)
@@ -98,5 +99,8 @@ info get_info();
 
 // L'overlay est affiché : active la mesure GPU complète du chemin Vulkan (inactive sinon).
 void note_overlay_visible();
+
+// SDK FSR 2.4 : identifiant de la version FSR 4 (fsr4 = true) ou FSR 3.1 parmi `versions` ; 0 si absente.
+uint64_t sdk_version_id(const info &i, bool fsr4);
 
 }  // namespace akfsr::fsr

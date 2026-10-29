@@ -131,9 +131,14 @@ void on_overlay(reshade::api::effect_runtime *) {
   auto s = akfsr::insertion::get_fsr_settings();
   const auto info = akfsr::fsr::get_info();
   const auto driver = akfsr::fsr4::get_info();
-  const bool fsr4_possible = s.fsr4_driver && akfsr::vk_device_hook::get_status().device_seen && !(driver.tried && !driver.ok);
+  // SDK FSR 2.4 (ak-fsr\sdk) : FSR 4 et FSR 3.1 viennent de ses versions ; sinon FSR 4 passe par le pilote.
+  const uint64_t sdk4 = akfsr::fsr::sdk_version_id(info, true), sdk3 = akfsr::fsr::sdk_version_id(info, false);
+  const bool driver_possible =
+      s.fsr4_driver && akfsr::vk_device_hook::get_status().device_seen && !(driver.tried && !driver.ok);
+  const bool fsr4_possible = sdk4 != 0 || driver_possible;
   const bool off = akfsr::insertion::get_mode() == akfsr::insertion::mode::off;
-  int choice = off ? 0 : (s.version_id == akfsr::fsr4::kDriverVersionId ? 2 : 1);
+  const bool is_fsr4 = s.version_id == akfsr::fsr4::kDriverVersionId || (sdk4 != 0 && s.version_id == sdk4);
+  int choice = off ? 0 : (is_fsr4 ? 2 : 1);
   bool changed = ImGui::RadioButton("Off", &choice, 0);
   ImGui::SameLine();
   changed |= ImGui::RadioButton("FSR 3.1", &choice, 1);
@@ -144,7 +149,7 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (changed) {
     akfsr::insertion::set_mode(choice == 0 ? akfsr::insertion::mode::off : akfsr::insertion::mode::fsr);
     if (choice != 0) {
-      s.version_id = choice == 2 ? akfsr::fsr4::kDriverVersionId : 0;
+      s.version_id = choice == 2 ? (sdk4 != 0 ? sdk4 : akfsr::fsr4::kDriverVersionId) : sdk3;
       // FSR 4 : chemin Vulkan obligatoire ; FSR 3.1 : backend par défaut (DX11, plus rapide, repli Vulkan).
       s.fsr_backend = choice == 2 ? akfsr::fsr::backend::vulkan : static_cast<akfsr::fsr::backend>(akfsr::fsr::kDefaultBackend);
       akfsr::insertion::set_fsr_settings(s);
@@ -152,7 +157,9 @@ void on_overlay(reshade::api::effect_runtime *) {
   }
   if (!fsr4_possible)
     ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr\\ ou pilote incompatible (voir README)");
-  else if (choice == 2) {
+  else if (choice == 2 && s.version_id != akfsr::fsr4::kDriverVersionId) {
+    ImGui::Text("FSR 4 du SDK AMD 2.4 (modèle choisi par le SDK selon la carte)");
+  } else if (choice == 2) {
     if (fsr4_model_combo(s)) akfsr::insertion::set_fsr_settings(s);
     ImGui::Text("Modèle choisi par le pilote : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
     if (driver.context_shaders > 0)

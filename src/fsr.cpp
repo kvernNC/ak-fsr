@@ -38,6 +38,7 @@ struct ffx_functions {
 
 struct state {
   bool tried_dll = false;
+  bool sdk = false;  // SDK FSR 2.4 chargé (ak-fsr\\sdk)
   bool dll_ok = false;
   bool pipeline_ok = false;
   VkShaderModule shader = VK_NULL_HANDLE;
@@ -132,8 +133,19 @@ bool load_dll() {
   wchar_t path[MAX_PATH] = {};
   GetModuleFileNameW(self, path, MAX_PATH);
   if (wchar_t *slash = wcsrchr(path, L'\\')) *(slash + 1) = 0;
-  wcscat_s(path, L"amd_fidelityfx_vk.dll");
-  HMODULE dll = LoadLibraryW(path);
+  // SDK FSR 2.4.0 (ak-fsr\sdk\, chargeur + upscaler Vulkan : FSR 3.1.6 et FSR 4 sans la DLL du pilote) s'il est
+  // présent, sinon la DLL monolithique du SDK 1.1.4 (FSR 3.1.4).
+  wchar_t sdk[MAX_PATH];
+  wcscpy_s(sdk, path);
+  wcscat_s(sdk, L"ak-fsr\\sdk\\amd_fidelityfx_loader_vk.dll");
+  HMODULE dll = LoadLibraryW(sdk);
+  g.sdk = dll != nullptr;
+  if (g.sdk) {
+    reshade::log::message(reshade::log::level::info, "AK-FSR: FidelityFX : SDK FSR 2.4 (ak-fsr\\sdk)");
+  } else {
+    wcscat_s(path, L"amd_fidelityfx_vk.dll");
+    dll = LoadLibraryW(path);
+  }
   if (dll == nullptr) {
     set_fsr_status("amd_fidelityfx_vk.dll introuvable à côté de l'addon (erreur " + std::to_string(GetLastError()) + ")",
                    true);
@@ -253,6 +265,20 @@ const char *device_name() {
   return props.deviceName;
 }
 
+}  // namespace
+
+uint64_t sdk_version_id(const info &i, bool fsr4) {
+  if (!i.sdk) return 0;
+  for (const auto &[id, name] : i.versions) {
+    const bool is4 = name.rfind("4.", 0) == 0 || name.rfind("FSR4", 0) == 0;
+    const bool is3 = name.rfind("3.", 0) == 0;
+    if (fsr4 ? is4 : is3) return id;
+  }
+  return 0;
+}
+
+namespace {
+
 // Versions de l'upscaler présentes dans la DLL (journalisées une fois, proposées dans l'overlay).
 void query_versions() {
   if (g.versions_queried) return;
@@ -276,6 +302,7 @@ void query_versions() {
   for (uint64_t i = 0; i < count; ++i) {
     const std::string name = names[i] ? names[i] : "?";
     g_info.versions.emplace_back(ids[i], name);
+    g_info.sdk = g.sdk;
     reshade::log::message(reshade::log::level::info,
                           ("AK-FSR: [ffx] version disponible : " + name + " (id " + std::to_string(ids[i]) + ")").c_str());
   }
@@ -346,7 +373,18 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
 // Contexte FFX : recréé si l'auto-exposition ou la version demandée changent.
 // `exposure` : une texture d'exposition sera fournie. Passer d'avec à sans dans un même contexte fait planter
 // FidelityFX (double free dans le pilote, constaté en jeu) : contexte recréé à chaque changement.
-bool ensure_context(const settings &s, bool exposure) {
+bool ensure_context(const settings &requested, bool exposure) {
+  settings s = requested;
+  if (g.sdk && s.version_id == fsr4::kDriverVersionId) {
+    // SDK FSR 2.4 chargé : son FSR 4 plutôt que celui du pilote (même nom de DLL dans ak-fsr\, conflit possible).
+    query_versions();
+    info i;
+    {
+      std::lock_guard lock(g_info_mutex);
+      i = g_info;
+    }
+    if (const uint64_t id = sdk_version_id(i, true)) s.version_id = id;
+  }
   if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_version == s.version_id &&
       g.ctx_game_mv == s.game_mv && g.ctx_exposure == exposure &&
       (s.version_id != fsr4::kDriverVersionId || g.ctx_fsr4_model == s.fsr4_model))
