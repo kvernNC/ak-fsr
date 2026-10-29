@@ -287,7 +287,14 @@ void query_versions() {
   ffxQueryDescGetVersions q{};
   q.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS;
   q.createDescType = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
-  q.device = ctx().device;
+  // SDK FSR 2.4 : pour Vulkan, `device` pointe sur un VkDeviceContext (périphérique, physique, GetDeviceProcAddr) ;
+  // les DLL plus anciennes attendent le VkDevice lui-même (le lui passer fait planter la 2.4 sous Proton, constaté).
+  struct {
+    VkDevice device;
+    VkPhysicalDevice physical;
+    PFN_vkGetDeviceProcAddr get_device_proc_addr;
+  } device_context{ctx().device, ctx().physical, ffx_get_device_proc_addr};
+  q.device = g.sdk ? static_cast<void *>(&device_context) : static_cast<void *>(ctx().device);
   q.outputCount = &count;
   if (ffx.query(nullptr, &q.header) != FFX_API_RETURN_OK || count == 0) {
     reshade::log::message(reshade::log::level::warning, "AK-FSR: [ffx] liste des versions indisponible");
