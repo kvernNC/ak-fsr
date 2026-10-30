@@ -23,6 +23,7 @@
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
+#include "ngx_probe.hpp"
 #include "lod_bias.hpp"
 #include "passes.hpp"
 #include "screenshot.hpp"
@@ -312,7 +313,11 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     cmd = line.substr(0, sp);
     arg = line.substr(sp + 1);
   }
-  if (cmd == "report") {
+  if (cmd == "ngxprobe") {  // expérience : OptiScaler en nvngx.dll répond-il à un Init NGX ? (voir [ngx] dans le log)
+    auto *dev = reinterpret_cast<ID3D11Device *>(runtime->get_device()->get_native());
+    const std::string r = akfsr::ngx_probe::run(dev);
+    log_fmt(reshade::log::level::info, "AK-FSR: [ngx] sonde : %s", r.c_str());
+  } else if (cmd == "report") {
     write_report();
   } else if (cmd == "profile") {
     const int count = static_cast<int>(std::size(kTestProfiles));

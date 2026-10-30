@@ -40,7 +40,7 @@ target_include_directories(ak-fsr PRIVATE
   src)
 target_compile_definitions(ak-fsr PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN AKFSR_DEV_TOOLS=$<BOOL:${AKFSR_DEV_TOOLS}>)
 if(AKFSR_DEV_TOOLS)
-  target_sources(ak-fsr PRIVATE src/dev_tools.cpp src/screenshot.cpp)
+  target_sources(ak-fsr PRIVATE src/dev_tools.cpp src/screenshot.cpp src/ngx_probe.cpp)
 endif()
 message(STATUS "AK-FSR : outils de développement ${AKFSR_DEV_TOOLS}")
 set_target_properties(ak-fsr PROPERTIES PREFIX "" SUFFIX ".addon64")
