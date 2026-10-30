@@ -86,6 +86,7 @@ struct info {
   std::string provider;                                 // version effectivement utilisée
   std::vector<std::pair<uint64_t, std::string>> versions;  // versions présentes dans la DLL
   bool sdk = false;  // versions fournies par le SDK FSR 2.4 (FSR 4 sans la DLL du pilote)
+  double model_memory_mib = 0.0;  // mémoire GPU du modèle actif (diagnostic « léger / complet »)
   float fov_deg = 0, near_plane = 0;  // déduits de la matrice, pour vérification
   float jitter_px_x = 0, jitter_px_y = 0;  // jitter relu dans le CB View (pixels), transmis à FSR
   float prev_mismatch = -1;                // écart max entre ViewProj précédente du CB et mémorisée (-1 : n/a)

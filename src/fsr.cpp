@@ -498,6 +498,20 @@ bool ensure_context(const settings &requested, bool exposure) {
                 "auto-exposition %s", g.width, g.height, static_cast<int>(g.format), name.c_str(),
                 s.auto_exposure ? "oui" : "non");
   reshade::log::message(reshade::log::level::info, buf);
+
+  // Diagnostic : mémoire GPU du modèle (détecteur « léger / complet » ; le modèle allégé fait moins de la
+  // moitié de l'INT8 complet). Sur les contextes/pilotes qui ne gèrent pas la requête, on ignore l'échec.
+  FfxApiEffectMemoryUsage mem{};
+  ffxQueryDescUpscaleGetGPUMemoryUsage mq{};
+  mq.header.type = FFX_API_QUERY_DESC_TYPE_UPSCALE_GPU_MEMORY_USAGE;
+  mq.gpuMemoryUsageUpscaler = &mem;
+  if (ffx.query(&g.context, &mq.header) == FFX_API_RETURN_OK && mem.totalUsageInBytes != 0) {
+    std::snprintf(buf, sizeof(buf), "AK-FSR: modèle : mémoire GPU %.1f Mio (dont partageable %.1f Mio)",
+                  mem.totalUsageInBytes / 1048576.0, mem.aliasableUsageInBytes / 1048576.0);
+    reshade::log::message(reshade::log::level::info, buf);
+    std::lock_guard lock(g_info_mutex);
+    g_info.model_memory_mib = mem.totalUsageInBytes / 1048576.0;
+  }
   return true;
 }
 
