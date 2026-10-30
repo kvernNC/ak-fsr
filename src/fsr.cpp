@@ -505,7 +505,9 @@ bool ensure_context(const settings &requested, bool exposure) {
   ffxQueryDescUpscaleGetGPUMemoryUsage mq{};
   mq.header.type = FFX_API_QUERY_DESC_TYPE_UPSCALE_GPU_MEMORY_USAGE;
   mq.gpuMemoryUsageUpscaler = &mem;
-  if (ffx.query(&g.context, &mq.header) == FFX_API_RETURN_OK && mem.totalUsageInBytes != 0) {
+  // Contexte du pilote : à interroger par son provider (le chargeur du SDK ne le connaît pas, lecture de 0x0).
+  const ffxReturnCode_t mrc = g.ctx_driver ? fsr4::query(&g.context, &mq.header) : ffx.query(&g.context, &mq.header);
+  if (mrc == FFX_API_RETURN_OK && mem.totalUsageInBytes != 0) {
     std::snprintf(buf, sizeof(buf), "AK-FSR: modèle : mémoire GPU %.1f Mio (dont partageable %.1f Mio)",
                   mem.totalUsageInBytes / 1048576.0, mem.aliasableUsageInBytes / 1048576.0);
     reshade::log::message(reshade::log::level::info, buf);
