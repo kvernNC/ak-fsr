@@ -147,9 +147,8 @@ void on_overlay(reshade::api::effect_runtime *) {
     ImGui::SameLine();
     model_changed |= ImGui::Checkbox("Watermark du pilote", &s.fsr4_watermark);
     if (model_changed) akfsr::insertion::set_fsr_settings(s);
-    ImGui::Text("Modèle choisi par le pilote : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
-    if (driver.context_shaders > 0)
-      ImGui::TextDisabled("(%u shaders, empreinte 0x%08X)", driver.context_shaders, driver.context_hash);
+    ImGui::Text("Version : FSR %s", akfsr::fsr4::kDriverVersionName);
+    ImGui::Text("Modèle utilisé : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
   }
   if (!off && !info.status.empty() && info.status.rfind("actif", 0) != 0)
     ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.4f, 1.0f), "FSR : %s", info.status.c_str());
