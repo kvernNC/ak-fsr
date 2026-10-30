@@ -212,6 +212,84 @@ constexpr spoof kSpoofs[] = {
 };
 
 std::atomic<int> g_identity_logs{0};  // remis à zéro à chaque création de contexte
+identity_profile g_profile;
+
+void copy_str(char *dst, size_t cap, const std::string &s) { std::snprintf(dst, cap, "%s", s.c_str()); }
+
+void read_str(const char *key, std::string &value) {
+  char buf[256];
+  size_t size = sizeof(buf);
+  if (reshade::get_config_value(nullptr, "FSR4.LiteProfile", key, buf, &size)) value = buf;
+}
+
+template <typename T>
+void read_u32(const char *key, T &value) {  // décimal ou 0x…
+  std::string s;
+  read_str(key, s);
+  if (!s.empty()) value = static_cast<T>(std::strtoul(s.c_str(), nullptr, 0));
+}
+
+void load_identity_config() {
+  auto &c = g_profile;
+  reshade::get_config_value(nullptr, "FSR4.LiteProfile", "Enabled", c.enabled);
+  read_u32("LiteVendorId", c.vendor_id);
+  read_u32("LiteDeviceId", c.device_id);
+  read_u32("LiteDeviceType", c.device_type);
+  read_str("LiteDeviceName", c.device_name);
+  read_u32("LiteDriverVersion", c.driver_version);
+  read_u32("LiteDriverId", c.driver_id);
+  read_str("LiteDriverName", c.driver_name);
+  read_str("LiteDriverInfo", c.driver_info);
+  reshade::get_config_value(nullptr, "FSR4.LiteProfile", "SpoofShaderCore", c.spoof_shader_core);
+  if (c.enabled) log(reshade::log::level::info, describe_identity());
+}
+
+void apply_identity(VkPhysicalDeviceProperties &p) {
+  p.vendorID = g_profile.vendor_id;
+  p.deviceID = g_profile.device_id;
+  p.deviceType = g_profile.device_type;
+  p.driverVersion = g_profile.driver_version;
+  copy_str(p.deviceName, sizeof(p.deviceName), g_profile.device_name);
+}
+
+void apply_identity_chain(void *next) {
+  const auto &c = g_profile;
+  for (auto *s = static_cast<VkBaseOutStructure *>(next); s != nullptr; s = s->pNext) {
+    switch (s->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES: {
+        auto *d = reinterpret_cast<VkPhysicalDeviceDriverProperties *>(s);
+        d->driverID = c.driver_id;
+        copy_str(d->driverName, sizeof(d->driverName), c.driver_name);
+        copy_str(d->driverInfo, sizeof(d->driverInfo), c.driver_info);
+        break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES: {
+        auto *v = reinterpret_cast<VkPhysicalDeviceVulkan12Properties *>(s);
+        v->driverID = c.driver_id;
+        copy_str(v->driverName, sizeof(v->driverName), c.driver_name);
+        copy_str(v->driverInfo, sizeof(v->driverInfo), c.driver_info);
+        break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD:
+        if (c.spoof_shader_core) {
+          auto *a = reinterpret_cast<VkPhysicalDeviceShaderCorePropertiesAMD *>(s);
+          a->shaderEngineCount = c.shader_engines;
+          a->shaderArraysPerEngineCount = c.arrays_per_engine;
+          a->computeUnitsPerShaderArray = c.cu_per_shader_array;
+          a->simdPerComputeUnit = c.simd_per_cu;
+          a->wavefrontsPerSimd = c.waves_per_simd;
+          a->wavefrontSize = c.wave_size;
+        }
+        break;
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD:
+        if (c.spoof_shader_core)
+          reinterpret_cast<VkPhysicalDeviceShaderCoreProperties2AMD *>(s)->activeComputeUnitCount = c.active_cu_count;
+        break;
+      default:
+        break;
+    }
+  }
+}
 
 void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
   if (g_identity_logs.fetch_add(1) < 4) {
@@ -220,6 +298,7 @@ void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
                   p.deviceID, p.deviceName);
     log(reshade::log::level::info, buf);
   }
+  if (g_profile.enabled) return apply_identity(p);  // profil complet : remplace aussi le GPU du modèle
   const int m = g_model.load();
   if (m <= 0 || m >= static_cast<int>(std::size(kSpoofs)) || p.vendorID != 0x1002) return;
   p.deviceID = kSpoofs[m].device_id;
@@ -244,6 +323,7 @@ VKAPI_ATTR void VKAPI_CALL hooked_props2(VkPhysicalDevice physical, VkPhysicalDe
     log(reshade::log::level::info, "vkGetPhysicalDeviceProperties2 : structures demandées :" + (chain.empty() ? std::string(" aucune") : chain));
   }
   apply_spoof(p->properties, "vkGetPhysicalDeviceProperties2");
+  if (g_profile.enabled) apply_identity_chain(p->pNext);
 }
 
 // Capacités masquées au pilote selon le modèle imposé (il choisit aussi d'après elles : constaté, l'identité
@@ -385,6 +465,7 @@ bool load() {
   if (driver == nullptr)
     return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr\\ (erreur " + std::to_string(GetLastError()) +
                 ")");
+  load_identity_config();  // avant UpdateFfxApiProviderEx, qui peut déjà interroger le GPU
   {
     const int patched = patch_imports(driver);
     log(patched == 4 ? reshade::log::level::info : reshade::log::level::warning,
@@ -516,6 +597,16 @@ std::string expected_model(const char *device_name) {
   if (has("GFX11")) return "INT8 (RDNA 3)";
   if (has("GFX103")) return "INT8-2 (RDNA 2)";
   return "inconnu";
+}
+
+identity_profile &identity() { return g_profile; }
+
+std::string describe_identity() {
+  const auto &c = g_profile;
+  char buf[256];
+  std::snprintf(buf, sizeof(buf), "profil d'identité : %s (0x%04x:0x%04x « %s », %s %s)", c.enabled ? "actif" : "inactif",
+                c.vendor_id, c.device_id, c.device_name.c_str(), c.driver_name.c_str(), c.driver_info.c_str());
+  return buf;
 }
 
 info get_info() {
