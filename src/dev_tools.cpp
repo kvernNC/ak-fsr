@@ -19,7 +19,6 @@
 #include "exposure.hpp"
 #include "frame_dump.hpp"
 #include "fsr4_driver.hpp"
-#include "fsr_dx11.hpp"
 #include "highlights.hpp"
 #include "insertion.hpp"
 #include "jitter.hpp"
@@ -60,21 +59,13 @@ const test_profile kTestProfiles[] = {
     {"0. Référence (défauts)", [](akfsr::fsr::settings &) {}},
     {"2. M7.2 hautes lumières", [](akfsr::fsr::settings &s) { s.highlights = true; }},
     {"4. M8.1 insertion au SMAA", [](akfsr::fsr::settings &s) { s.smaa_insertion = true; }},
-    {"5. M8.2 backend DX11", [](akfsr::fsr::settings &s) { s.fsr_backend = akfsr::fsr::backend::dx11; }},
-    {"4+5. M8.1 + M8.2 (budget Deck)", [](akfsr::fsr::settings &s) {
-       s.smaa_insertion = true;
-       s.fsr_backend = akfsr::fsr::backend::dx11;
-     }},
     {"6. M8.3 vecteurs du jeu (UV)", [](akfsr::fsr::settings &s) { s.game_mv = true; }},
     {"6. M8.3 vecteurs du jeu ([-1,1])", [](akfsr::fsr::settings &s) {
        s.game_mv = true;
        s.game_mv_scale = 1;
      }},
     {"7. M8.4 biais de LOD -0.5 (relancer)", [](akfsr::fsr::settings &s) { s.lod_bias = -0.5f; }},
-    {"8-9. M10 FSR 4 pilote (relancer)", [](akfsr::fsr::settings &s) {
-       s.fsr4_driver = true;
-       s.version_id = akfsr::fsr4::kDriverVersionId;
-     }},
+    {"8-9. M10.3 FSR 4 modèle INT8", [](akfsr::fsr::settings &s) { s.fsr4_model = 2; }},
     {"10. M8.5 exposition du jeu", [](akfsr::fsr::settings &s) { s.game_exposure = true; }},
 };
 
@@ -148,15 +139,14 @@ std::string build_report() {
   add("AK-FSR %s (%s), swapchain %ux%u format %u, %.1f fps (%.2f ms par frame)", AKFSR_VERSION, AKFSR_MILESTONE,
       g_swapchain.width, g_swapchain.height, static_cast<uint32_t>(g_swapchain.format),
       g_frame_ms > 0 ? 1000.0 / g_frame_ms : 0.0, g_frame_ms);
-  add("[réglages] Mode=%d coupé_par_touche=%d ToggleKey=%u Backend=%d Version=%llu Jitter=%d ShaderPatches=%d",
+  add("[réglages] Mode=%d coupé_par_touche=%d ToggleKey=%u Jitter=%d ShaderPatches=%d",
       static_cast<int>(akfsr::insertion::get_mode()), akfsr::insertion::bypassed() ? 1 : 0,
-      akfsr::insertion::get_toggle_key(), static_cast<int>(st.fsr_backend),
-      static_cast<unsigned long long>(st.version_id), st.jitter ? 1 : 0, akfsr::passes::shader_patches_enabled() ? 1 : 0);
+      akfsr::insertion::get_toggle_key(), st.jitter ? 1 : 0, akfsr::passes::shader_patches_enabled() ? 1 : 0);
   add("[réglages] ObjectVelocity=%d AutoExposure=%d Sharpness=%.2f PrevMatrix=%d Highlights=%d (%.1f) SmaaInsertion=%d",
       st.object_velocity ? 1 : 0, st.auto_exposure ? 1 : 0, st.sharpness, static_cast<int>(st.prev_source),
       st.highlights ? 1 : 0, st.highlight_threshold, st.smaa_insertion ? 1 : 0);
-  add("[réglages] GameMotionVectors=%d GameMvScale=%d GameMvFlipY=%d LodBias=%.2f Fsr4Driver=%d", st.game_mv ? 1 : 0,
-      st.game_mv_scale, st.game_mv_flip_y ? 1 : 0, st.lod_bias, st.fsr4_driver ? 1 : 0);
+  add("[réglages] GameMotionVectors=%d GameMvScale=%d GameMvFlipY=%d LodBias=%.2f Fsr4Model=%d", st.game_mv ? 1 : 0,
+      st.game_mv_scale, st.game_mv_flip_y ? 1 : 0, st.lod_bias, st.fsr4_model);
   auto pass = [&](const char *name, const akfsr::passes::pass_status &p) {
     add("[passe] %-12s %s 0x%08X trouvées %llu manquées %llu", name, p.found ? "OK" : "--", p.hash,
         static_cast<unsigned long long>(p.frames_found), static_cast<unsigned long long>(p.frames_missed));
@@ -189,10 +179,6 @@ std::string build_report() {
   add("[Vulkan] CPU %.3f ms | GPU %.3f ms (préparation %.3f, FSR %.3f) | complet vu par D3D11 %.3f ms | %llu exécutions, %llu échecs",
       t.flush_cpu_ms, t.gpu_ms, t.gpu_prepare_ms, t.gpu_fsr_ms, info.vulkan_total_gpu_ms,
       static_cast<unsigned long long>(t.runs), static_cast<unsigned long long>(t.failures));
-  const auto gt = akfsr::fsr::dx11::get_gpu_timings();
-  add("[DX11] %s | CPU %.3f ms | GPU préparation %.3f, FSR %.3f, copie %.3f, total %.3f ms",
-      info.dx11_status.empty() ? "non lancé" : info.dx11_status.c_str(), info.dx11_cpu_ms, gt.prepare_ms, gt.fsr_ms,
-      gt.copy_ms, gt.prepare_ms + gt.fsr_ms + gt.copy_ms);
   add("[M7.2] hautes lumières : %s", st.highlights ? akfsr::highlights::status().c_str() : "option coupée");
   const auto lb = akfsr::lod_bias::get_stats();
   add("[M8.4] biais de LOD en vigueur %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified, lb.skipped);
@@ -202,10 +188,9 @@ std::string build_report() {
   for (const auto &m : hook.missing) missing += m + " ";
   add("[M10.2] device : %s | ajoutées : %s| absentes : %s", hook.message.c_str(), added.c_str(), missing.c_str());
   const auto d = akfsr::fsr4::get_info();
-  add("[M10.2] provider : %s, « %s », id 0x%016llx, modèle %s (%s), shaders %u dont %u réécrits, %u échecs ; repli : %s",
+  add("[M10.2] provider : %s, « %s », id 0x%016llx, modèle %s (%s), shaders %u dont %u réécrits, %u échecs",
       d.tried ? d.status.c_str() : "non essayé", d.provider_name.c_str(), static_cast<unsigned long long>(d.provider_id),
-      d.model.empty() ? "?" : d.model.c_str(), d.model_seen.c_str(), d.shaders, d.shaders_rewritten, d.shader_failures,
-      info.fsr4_status.empty() ? "-" : info.fsr4_status.c_str());
+      d.model.empty() ? "?" : d.model.c_str(), d.model_seen.c_str(), d.shaders, d.shaders_rewritten, d.shader_failures);
   const auto js = akfsr::jitter::get_status();
   add("[jitter] %s", js.message.c_str());
   for (const auto &c : js.callers)
@@ -344,18 +329,6 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
   } else if (cmd == "offset") {  // diagnostic : jitter figé sur un décalage « x y » en pixels
     float x = 0, y = 0;
     if (std::sscanf(arg.c_str(), "%f %f", &x, &y) == 2) akfsr::jitter::force_offset(x, y);
-  } else if (cmd == "sdkver") {  // SDK FSR 2.4 : impose la n-ième version listée (0 = défaut). Voir le log.
-    const auto info = akfsr::fsr::get_info();
-    auto s = akfsr::insertion::get_fsr_settings();
-    const int n = std::atoi(arg.c_str());
-    if (n == 0) {
-      s.version_id = 0;
-    } else if (n >= 1 && static_cast<size_t>(n) <= info.versions.size()) {
-      s.version_id = info.versions[n - 1].first;
-      log_fmt(reshade::log::level::info, "AK-FSR: sdkver : version %d = « %s » (id %llu)", n,
-              info.versions[n - 1].second.c_str(), static_cast<unsigned long long>(s.version_id));
-    }
-    akfsr::insertion::set_fsr_settings(s);
   } else if (cmd == "model") {  // modèle FSR 4 imposé : 0 auto, 1 FP8, 2 INT8, 3 INT8-2, 4 Lite
     auto s = akfsr::insertion::get_fsr_settings();
     s.fsr4_model = std::clamp(std::atoi(arg.c_str()), 0, 4);
@@ -623,7 +596,7 @@ void draw_diagnostics() {
   const auto fsr_settings = akfsr::insertion::get_fsr_settings();
   const auto fsr_info = akfsr::fsr::get_info();
   const auto driver = akfsr::fsr4::get_info();
-  if (fsr_settings.fsr4_driver) {
+  {
     const auto hook = akfsr::vk_device_hook::get_status();
     ImGui::TextWrapped("FSR 4 pilote, device Vulkan : %s", hook.message.empty() ? "détour non installé (relancer le jeu)"
                                                                                  : hook.message.c_str());
@@ -636,14 +609,6 @@ void draw_diagnostics() {
     const auto lb = akfsr::lod_bias::get_stats();
     ImGui::Text("Biais de LOD en vigueur : %+.2f, %u samplers modifiés, %u laissés", lb.applied_bias, lb.modified,
                 lb.skipped);
-  }
-  if (fsr_settings.fsr_backend == akfsr::fsr::backend::dx11) {
-    ImGui::Text("Backend DX11 : %s | CPU %.3f ms", fsr_info.dx11_status.empty() ? "pas encore lancé" :
-                fsr_info.dx11_status.c_str(), fsr_info.dx11_cpu_ms);
-    const auto gt = akfsr::fsr::dx11::get_gpu_timings();
-    if (gt.valid)
-      ImGui::Text("  GPU : préparation %.3f ms | FSR %.3f ms | copie %.3f ms | total %.3f ms", gt.prepare_ms, gt.fsr_ms,
-                  gt.copy_ms, gt.prepare_ms + gt.fsr_ms + gt.copy_ms);
   }
   if (fsr_info.prev_mismatch >= 0)
     ImGui::Text("Écart ViewProj précédente CB / mémorisée : %.6f (utilisée : %s)", fsr_info.prev_mismatch,

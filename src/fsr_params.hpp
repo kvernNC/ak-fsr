@@ -6,7 +6,7 @@
 
 namespace akfsr::fsr {
 
-// Constantes du shader de préparation (GLSL fsr_prepare.comp / HLSL de fsr_dx11.cpp), même disposition.
+// Constantes du shader de préparation (GLSL fsr_prepare.comp).
 struct push_constants {
   float reproj[16];  // colonne par colonne (mat4 GLSL, float4x4 column_major HLSL)
   float size[2];
