@@ -26,7 +26,7 @@
 #include "dev_tools.hpp"
 #endif
 
-extern "C" __declspec(dllexport) const char *NAME = "AK-FSR";
+extern "C" __declspec(dllexport) const char *NAME = "AK-FSR4-Linux-AMD";
 extern "C" __declspec(dllexport) const char *DESCRIPTION =
     "AA temporel FSR pour Batman: Arkham Knight (v" AKFSR_VERSION ")";
 
@@ -53,9 +53,9 @@ void log_environment(const std::filesystem::path &dir) {
   auto present = [&](const std::filesystem::path &p) { return std::filesystem::exists(p, ec) ? "oui" : "non"; };
   log_fmt(reshade::log::level::info,
           "AK-FSR: diagnostic : d3dcompiler_47 %s", LoadLibraryW(L"d3dcompiler_47.dll") != nullptr ? "oui" : "non");
-  const auto amd = dir / "ak-fsr";
+  const auto amd = dir / "ak-fsr4-linux-amd";
   log_fmt(reshade::log::level::info,
-          "AK-FSR: diagnostic : ak-fsr\\ amdvkffx64.dll %s, amd_fidelityfx_loader_vk.dll %s, "
+          "AK-FSR: diagnostic : ak-fsr4-linux-amd\\ amdvkffx64.dll %s, amd_fidelityfx_loader_vk.dll %s, "
           "amd_fidelityfx_upscaler_vk.dll %s",
           present(amd / "amdvkffx64.dll"), present(amd / "amd_fidelityfx_loader_vk.dll"),
           present(amd / "amd_fidelityfx_upscaler_vk.dll"));
@@ -125,7 +125,7 @@ bool fsr4_model_combo(akfsr::fsr::settings &s) {
 #if !AKFSR_DEV_TOOLS
 // Version publiée : un seul choix, l'AA utilisé ; le reste suit les réglages validés (voir fsr.hpp).
 void on_overlay(reshade::api::effect_runtime *) {
-  ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " : anti-aliasing FSR 4");
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " : anti-aliasing FSR 4");
   ImGui::Separator();
   auto s = akfsr::insertion::get_fsr_settings();
   const auto info = akfsr::fsr::get_info();
@@ -141,7 +141,7 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (changed)
     akfsr::insertion::set_mode(choice == 0 ? akfsr::insertion::mode::off : akfsr::insertion::mode::fsr);
   if (!fsr4_possible) {
-    ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr\\ ou pilote incompatible (voir README)");
+    ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr4-linux-amd\\ ou pilote incompatible (voir README)");
   } else {
     bool model_changed = fsr4_model_combo(s);
     ImGui::SameLine();
@@ -157,11 +157,11 @@ void on_overlay(reshade::api::effect_runtime *) {
 void on_overlay(reshade::api::effect_runtime *) {
   akfsr::fsr::note_overlay_visible();
 #if AKFSR_DEV_TOOLS
-  ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " (développement, " AKFSR_MILESTONE ")");
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " (développement, " AKFSR_MILESTONE ")");
   ImGui::Separator();
   akfsr::dev::draw_passes();
 #else
-  ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION);
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION);
 #endif
   ImGui::Separator();
   int mode = static_cast<int>(akfsr::insertion::get_mode());

@@ -10,12 +10,12 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "CompanyName", "AK-FSR"
-      VALUE "FileDescription", "AA temporel FSR pour Batman: Arkham Knight"
+      VALUE "CompanyName", "AK-FSR4-Linux-AMD"
+      VALUE "FileDescription", "FSR 4 (Linux/Proton, AMD) pour Batman: Arkham Knight"
       VALUE "FileVersion", AKFSR_VERSION
-      VALUE "InternalName", "ak-fsr"
-      VALUE "OriginalFilename", "ak-fsr.addon64"
-      VALUE "ProductName", "AK-FSR"
+      VALUE "InternalName", "ak-fsr4-linux-amd"
+      VALUE "OriginalFilename", "ak-fsr4-linux-amd.addon64"
+      VALUE "ProductName", "AK-FSR4-Linux-AMD"
       VALUE "ProductVersion", AKFSR_VERSION
     END
   END

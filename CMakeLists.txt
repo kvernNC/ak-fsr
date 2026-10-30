@@ -42,6 +42,6 @@ if(AKFSR_DEV_TOOLS)
   target_sources(ak-fsr PRIVATE src/dev_tools.cpp src/screenshot.cpp)
 endif()
 message(STATUS "AK-FSR : outils de développement ${AKFSR_DEV_TOOLS}")
-set_target_properties(ak-fsr PROPERTIES PREFIX "" SUFFIX ".addon64")
+set_target_properties(ak-fsr PROPERTIES PREFIX "" SUFFIX ".addon64" OUTPUT_NAME "ak-fsr4-linux-amd")
 target_link_libraries(ak-fsr PRIVATE dxguid)
 

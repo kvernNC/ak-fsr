@@ -527,7 +527,7 @@ bool load() {
     if (g_info.tried) return g_info.ok;
     g_info.tried = true;
   }
-  const std::wstring dir = addon_dir() + L"ak-fsr\\";
+  const std::wstring dir = addon_dir() + L"ak-fsr4-linux-amd\\";
   // Le pilote ne donne ses providers qu'en présence de DLL du SDK signées par AMD (§8.1).
   int signed_loaded = 0;
   for (const wchar_t *name : {L"amd_fidelityfx_loader_vk.dll", L"amd_fidelityfx_upscaler_vk.dll"}) {
@@ -535,14 +535,14 @@ bool load() {
       ++signed_loaded;
     } else {
       char buf[160];
-      std::snprintf(buf, sizeof(buf), "%ls introuvable dans ak-fsr\\ (erreur %lu)", name, GetLastError());
+      std::snprintf(buf, sizeof(buf), "%ls introuvable dans ak-fsr4-linux-amd\\ (erreur %lu)", name, GetLastError());
       log(reshade::log::level::warning, buf);
     }
   }
   HMODULE driver = LoadLibraryW((dir + L"amdvkffx64.dll").c_str());
   if (driver == nullptr) driver = GetModuleHandleW(L"amdvkffx64.dll");
   if (driver == nullptr)
-    return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr\\ (erreur " + std::to_string(GetLastError()) +
+    return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr4-linux-amd\\ (erreur " + std::to_string(GetLastError()) +
                 ")");
   load_identity_config();  // avant UpdateFfxApiProviderEx, qui peut déjà interroger le GPU
   {
