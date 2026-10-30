@@ -143,7 +143,10 @@ void on_overlay(reshade::api::effect_runtime *) {
   if (!fsr4_possible) {
     ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr\\ ou pilote incompatible (voir README)");
   } else {
-    if (fsr4_model_combo(s)) akfsr::insertion::set_fsr_settings(s);
+    bool model_changed = fsr4_model_combo(s);
+    ImGui::SameLine();
+    model_changed |= ImGui::Checkbox("Watermark du pilote", &s.fsr4_watermark);
+    if (model_changed) akfsr::insertion::set_fsr_settings(s);
     ImGui::Text("Modèle choisi par le pilote : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
     if (driver.context_shaders > 0)
       ImGui::TextDisabled("(%u shaders, empreinte 0x%08X)", driver.context_shaders, driver.context_hash);
@@ -177,6 +180,8 @@ void on_overlay(reshade::api::effect_runtime *) {
   bool fsr_changed = false;
   const auto fsr_info = akfsr::fsr::get_info();
   fsr_changed |= fsr4_model_combo(fsr_settings);
+  ImGui::SameLine();
+  fsr_changed |= ImGui::Checkbox("Watermark", &fsr_settings.fsr4_watermark);
   {
     const auto driver_info = akfsr::fsr4::get_info();
     ImGui::SameLine();

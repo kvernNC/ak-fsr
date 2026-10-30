@@ -53,6 +53,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::set_config_value(nullptr, kSection, "LodBias", s.lod_bias);
   reshade::set_config_value(nullptr, kSection, "Fsr4Model", s.fsr4_model);
+  reshade::set_config_value(nullptr, kSection, "Fsr4Watermark", s.fsr4_watermark);
   reshade::set_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
   reshade::set_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
   reshade::set_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
@@ -80,6 +81,7 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::get_config_value(nullptr, kSection, "LodBias", s.lod_bias);
   reshade::get_config_value(nullptr, kSection, "Fsr4Model", s.fsr4_model);
+  reshade::get_config_value(nullptr, kSection, "Fsr4Watermark", s.fsr4_watermark);
   reshade::get_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
   reshade::get_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
   reshade::get_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);

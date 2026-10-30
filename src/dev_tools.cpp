@@ -329,6 +329,10 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
   } else if (cmd == "offset") {  // diagnostic : jitter figé sur un décalage « x y » en pixels
     float x = 0, y = 0;
     if (std::sscanf(arg.c_str(), "%f %f", &x, &y) == 2) akfsr::jitter::force_offset(x, y);
+  } else if (cmd == "watermark") {  // watermark du pilote FSR 4 : 0 / 1
+    auto s = akfsr::insertion::get_fsr_settings();
+    s.fsr4_watermark = std::atoi(arg.c_str()) != 0;
+    akfsr::insertion::set_fsr_settings(s);
   } else if (cmd == "model") {  // modèle FSR 4 imposé : 0 auto, 1 FP8, 2 INT8, 3 INT8-2, 4 Lite
     auto s = akfsr::insertion::get_fsr_settings();
     s.fsr4_model = std::clamp(std::atoi(arg.c_str()), 0, 4);

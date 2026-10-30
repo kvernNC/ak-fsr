@@ -588,6 +588,22 @@ void set_model(model m) {
   }
 }
 
+void set_watermark(bool on) {
+  // Le pilote lit l'environnement du CRT partagé (ucrtbase, via api-ms-win-crt-environment) : celui de l'addon est
+  // statique, son _putenv_s ne le toucherait pas. Valeur vide = variable supprimée.
+  using putenv_fn = int(__cdecl *)(const char *, const char *);
+  static const auto put = reinterpret_cast<putenv_fn>(GetProcAddress(LoadLibraryW(L"ucrtbase.dll"), "_putenv_s"));
+  static std::atomic<int> last{-1};
+  if (put == nullptr) {
+    if (last.exchange(-2) != -2) log(reshade::log::level::warning, "watermark : _putenv_s absent de ucrtbase.dll");
+    return;
+  }
+  put("MLSR-WATERMARK", on ? "1" : "");
+  SetEnvironmentVariableW(L"MLSR-WATERMARK", on ? L"1" : nullptr);
+  if (last.exchange(on ? 1 : 0) != (on ? 1 : 0))
+    log(reshade::log::level::info, on ? "watermark du pilote activé" : "watermark du pilote désactivé");
+}
+
 std::string expected_model(const char *device_name) {
   const std::string n = device_name != nullptr ? device_name : "";
   auto has = [&](const char *s) { return n.find(s) != std::string::npos; };

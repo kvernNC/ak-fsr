@@ -42,6 +42,7 @@ struct state {
   bool ctx_game_mv = false;
   bool ctx_exposure = false;  // M8.5 : contexte utilisé avec une texture d'exposition
   int ctx_fsr4_model = 0;     // modèle FSR 4 imposé au pilote à la création du contexte
+  bool ctx_watermark = false;
   bool images_exposure = false;  // M8.5 : images créées pour une frame avec exposition
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
   uint32_t width = 0, height = 0;
@@ -262,12 +263,13 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
   return true;
 }
 
-// Contexte FSR 4 du pilote : recréé si l'auto-exposition, les vecteurs du jeu ou le modèle imposé changent.
+// Contexte FSR 4 du pilote : recréé si l'auto-exposition, les vecteurs du jeu, le modèle imposé ou le watermark
+// changent.
 // `exposure` : une texture d'exposition sera fournie. Passer d'avec à sans dans un même contexte fait planter
 // FidelityFX (double free dans le pilote, constaté en jeu) : contexte recréé à chaque changement.
 bool ensure_context(const settings &s, bool exposure) {
   if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_game_mv == s.game_mv &&
-      g.ctx_exposure == exposure && g.ctx_fsr4_model == s.fsr4_model)
+      g.ctx_exposure == exposure && g.ctx_fsr4_model == s.fsr4_model && g.ctx_watermark == s.fsr4_watermark)
     return true;
   if (g.context != nullptr) {
     wait_idle();
@@ -286,6 +288,7 @@ bool ensure_context(const settings &s, bool exposure) {
                                                        ? "AK-FSR: création du contexte FSR 4 (auto-exposition oui)"
                                                        : "AK-FSR: création du contexte FSR 4 (auto-exposition non)");
   fsr4::set_model(static_cast<fsr4::model>(s.fsr4_model));
+  fsr4::set_watermark(s.fsr4_watermark);
   const ffxReturnCode_t rc =
       fsr4::create_context(&g.context, &desc.header, ctx().device, ctx().physical, ffx_get_device_proc_addr);
   if (rc != FFX_API_RETURN_OK) {
@@ -300,6 +303,7 @@ bool ensure_context(const settings &s, bool exposure) {
   g.ctx_game_mv = s.game_mv;
   g.ctx_exposure = exposure;
   g.ctx_fsr4_model = s.fsr4_model;
+  g.ctx_watermark = s.fsr4_watermark;
   h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 
   const std::string name = std::string(fsr4::kDriverVersionName) + ", modèle attendu " + fsr4::expected_model(device_name());

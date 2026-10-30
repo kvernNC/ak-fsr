@@ -34,6 +34,10 @@ ffxReturnCode_t query(ffxContext *context, ffxQueryDescHeader *desc);
 enum class model : int { automatic = 0, fp8 = 1, int8 = 2, int8_navi2 = 3, lite = 4 };
 void set_model(model m);
 
+// Watermark du pilote (nom du provider et modèle dessinés sur l'image) : variable d'environnement MLSR-WATERMARK,
+// lue par le pilote à la création du contexte. À régler avant create_context.
+void set_watermark(bool on);
+
 // M12b §3.2 — profil d'identité : GPU et pilote présentés en entier au pilote (par défaut Ryzen Z2 A sous pilote
 // AMD Windows), appliqué après le GPU du modèle imposé. Seul amdvkffx64.dll le voit : les DLL signées
 // amd_fidelityfx_*_vk.dll n'importent pas Vulkan (constaté), le jeu, DXVK et ReShade gardent la réponse réelle.

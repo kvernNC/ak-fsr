@@ -49,6 +49,7 @@ struct settings {
   float lod_bias = kDefaultLodBias;  // M8.4 : biais de LOD des textures (0 = désactivé ; pris en compte au lancement)
   // Modèle FSR 4 imposé au pilote (fsr4::model) : 0 = choix du pilote. Recrée le contexte.
   int fsr4_model = 0;
+  bool fsr4_watermark = false;  // watermark du pilote (provider et modèle sur l'image). Recrée le contexte.
   // M8.5 : exposition du jeu (texture 1×1 du tonemapper) à la place de l'auto-exposition de FSR.
   bool game_exposure = false;
   int exposure_mode = 0;       // exposure::mode : tel quel, inverse, exp2, exp2(-x)
