@@ -324,6 +324,16 @@ VKAPI_ATTR void VKAPI_CALL hooked_props2(VkPhysicalDevice physical, VkPhysicalDe
   }
   apply_spoof(p->properties, "vkGetPhysicalDeviceProperties2");
   if (g_profile.enabled) apply_identity_chain(p->pNext);
+  // Le pilote garde en cache la famille du GPU (déduite de l'identifiant) sous le LUID : sans LUID propre au modèle,
+  // le premier GPU lu (le vrai, FP8) resservirait aux contextes suivants (constaté, amdvkffx64.dll 4.1.2).
+  const int m = g_profile.enabled ? 0x80 : g_model.load();
+  if (m <= 0) return;
+  for (auto *s = static_cast<VkBaseOutStructure *>(p->pNext); s != nullptr; s = s->pNext) {
+    if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES)
+      reinterpret_cast<VkPhysicalDeviceIDProperties *>(s)->deviceLUID[7] ^= static_cast<uint8_t>(0x40 | m);
+    else if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES)
+      reinterpret_cast<VkPhysicalDeviceVulkan11Properties *>(s)->deviceLUID[7] ^= static_cast<uint8_t>(0x40 | m);
+  }
 }
 
 // Capacités masquées au pilote selon le modèle imposé (il choisit aussi d'après elles : constaté, l'identité
@@ -390,7 +400,69 @@ VKAPI_ATTR VkResult VKAPI_CALL hooked_enum_ext(VkPhysicalDevice physical, const 
   return copied < kept.size() ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-// Remplace dans la table d'imports de `module` les fonctions de vulkan-1.dll nommées.
+// Famille et révision du GPU : le pilote ne les lit pas par Vulkan mais dans les données privées du pilote noyau
+// (gdi32!D3DKMTQueryAdapterInfo, type KMTQAITYPE_UMDRIVERPRIVATE, chargée par GetProcAddress), puis choisit le
+// premier provider qui l'accepte : FP8, i8 (famille 0x91), i8-2 (0x8F, rév. 0x28-0x4F), Lite (0x90) ; aucun → repli
+// sans modèle (constaté, amdvkffx64.dll 4.1.2). Deux formats : 0x260 octets (famille +0x30, rév. +0x34) ou, si
+// celui-ci est refusé (STATUS_BUFFER_TOO_SMALL), n adaptateurs (nombre +8, vendeur +0xC+2i, appareil +0x14+2i,
+// famille +0x1364+0x3A00i, rév. +0x1368+0x3A00i), où le pilote cherche l'identifiant présenté par Vulkan.
+struct kmt_query_adapter_info {
+  uint32_t adapter;
+  uint32_t type;
+  void *data;
+  uint32_t size;
+};
+using kmt_query_fn = LONG(APIENTRY *)(kmt_query_adapter_info *);
+kmt_query_fn g_real_kmt_query = nullptr;
+
+struct kmt_family {
+  uint32_t family, revision;
+};
+constexpr kmt_family kKmtFamilies[] = {{0, 0}, {0, 0}, {0x91, 0x01}, {0x8F, 0x28}, {0x90, 0x01}};
+
+LONG APIENTRY hooked_kmt_query(kmt_query_adapter_info *q) {
+  const LONG rc = g_real_kmt_query(q);
+  const int m = g_model.load();
+  if (rc < 0 || q == nullptr || q->type != 0 || q->data == nullptr || m < 2 || m > 4 || g_profile.enabled) return rc;
+  const kmt_family f = kKmtFamilies[m];
+  auto *d = static_cast<uint8_t *>(q->data);
+  auto put = [&](size_t at, uint32_t v) {
+    if (at + 4 <= q->size) std::memcpy(d + at, &v, 4);
+  };
+  if (q->size == 0x260) {
+    put(0x30, f.family);
+    put(0x34, f.revision);
+  } else if (q->size >= 0x4360) {
+    uint32_t n = 0;
+    std::memcpy(&n, d + 8, 4);
+    for (uint32_t i = 0; i < std::min<uint32_t>(n, 4); ++i) {
+      const uint16_t vendor = *reinterpret_cast<uint16_t *>(d + 0xC + 2 * i);
+      if (vendor != 0x1002) continue;
+      *reinterpret_cast<uint16_t *>(d + 0x14 + 2 * i) = static_cast<uint16_t>(kSpoofs[m].device_id);
+      put(0x1364 + 0x3A00 * i, f.family);
+      put(0x1368 + 0x3A00 * i, f.revision);
+    }
+  }
+  static std::atomic<int> logs{0};
+  if (logs.fetch_add(1) < 8) {
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "D3DKMTQueryAdapterInfo lu par le pilote : %u octets, famille présentée 0x%02X rév. 0x%02X",
+                  q->size, f.family, f.revision);
+    log(reshade::log::level::info, buf);
+  }
+  return rc;
+}
+
+FARPROC WINAPI hooked_get_proc(HMODULE module, LPCSTR name) {
+  FARPROC f = GetProcAddress(module, name);
+  if (f != nullptr && reinterpret_cast<uintptr_t>(name) > 0xFFFF && std::strcmp(name, "D3DKMTQueryAdapterInfo") == 0) {
+    g_real_kmt_query = reinterpret_cast<kmt_query_fn>(f);
+    return reinterpret_cast<FARPROC>(&hooked_kmt_query);
+  }
+  return f;
+}
+
+// Remplace dans la table d'imports de `module` les fonctions de vulkan-1.dll nommées (et GetProcAddress).
 int patch_imports(HMODULE module) {
   auto *base = reinterpret_cast<uint8_t *>(module);
   const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
@@ -399,7 +471,9 @@ int patch_imports(HMODULE module) {
   if (dir.VirtualAddress == 0) return 0;
   int patched = 0;
   for (auto *imp = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR *>(base + dir.VirtualAddress); imp->Name != 0; ++imp) {
-    if (_stricmp(reinterpret_cast<const char *>(base + imp->Name), "vulkan-1.dll") != 0) continue;
+    const char *dll = reinterpret_cast<const char *>(base + imp->Name);
+    const bool kernel32 = _stricmp(dll, "kernel32.dll") == 0;
+    if (!kernel32 && _stricmp(dll, "vulkan-1.dll") != 0) continue;
     auto *names = reinterpret_cast<IMAGE_THUNK_DATA64 *>(base + imp->OriginalFirstThunk);
     auto *slots = reinterpret_cast<IMAGE_THUNK_DATA64 *>(base + imp->FirstThunk);
     for (; names->u1.AddressOfData != 0; ++names, ++slots) {
@@ -407,7 +481,9 @@ int patch_imports(HMODULE module) {
       const char *name = reinterpret_cast<const char *>(
           reinterpret_cast<IMAGE_IMPORT_BY_NAME *>(base + names->u1.AddressOfData)->Name);
       void *replacement = nullptr;
-      if (std::strcmp(name, "vkGetPhysicalDeviceProperties") == 0) {
+      if (kernel32) {
+        if (std::strcmp(name, "GetProcAddress") == 0) replacement = reinterpret_cast<void *>(&hooked_get_proc);
+      } else if (std::strcmp(name, "vkGetPhysicalDeviceProperties") == 0) {
         g_real_props = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(slots->u1.Function);
         replacement = reinterpret_cast<void *>(&hooked_props);
       } else if (std::strcmp(name, "vkGetPhysicalDeviceProperties2") == 0) {
