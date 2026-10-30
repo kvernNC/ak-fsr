@@ -109,12 +109,13 @@ void toggle_key_row() {
 }
 
 
-// Modèle FSR 4 imposé au pilote : Auto (son choix d'après le GPU), FP8 ou INT8. Les variantes INT8 (RDNA 3,
-// RDNA 2, Lite) ne se distinguent pas ainsi : FP8 masqué, le pilote crée toujours le même INT8 (constaté sur PC,
-// shaders identiques) ; sur le Deck, Auto laisse le pilote choisir d'après le vrai matériel.
+// Modèle FSR 4 imposé au pilote (ordre de fsr4::model) : Auto (son choix d'après le GPU), FP8, INT8, INT8-2 ou
+// Lite, par le GPU présenté au pilote et les capacités masquées. Sur PC, les trois INT8 donnaient jusqu'ici les mêmes
+// shaders : le nom du provider créé (« choisi par le pilote ») et le watermark (MLSR-WATERMARK) font foi.
 bool fsr4_model_combo(akfsr::fsr::settings &s) {
-  static const char *models[] = {"Auto (choix du pilote)", "FP8 (RDNA 4)", "INT8"};
-  int choice = std::clamp(s.fsr4_model, 0, 2);
+  static const char *models[] = {"Auto (choix du pilote)", "FP8 (RDNA 4)", "INT8 (RDNA 3)", "INT8-2 (RDNA 2)",
+                                 "INT8 Lite (Deck)"};
+  int choice = std::clamp(s.fsr4_model, 0, 4);
   ImGui::SetNextItemWidth(200);
   if (!ImGui::Combo("Modèle FSR 4", &choice, models, static_cast<int>(std::size(models)))) return false;
   s.fsr4_model = choice;
