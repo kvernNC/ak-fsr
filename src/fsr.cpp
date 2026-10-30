@@ -306,7 +306,10 @@ bool ensure_context(const settings &s, bool exposure) {
   g.ctx_watermark = s.fsr4_watermark;
   h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 
-  const std::string name = std::string(fsr4::kDriverVersionName) + ", modèle attendu " + fsr4::expected_model(device_name());
+  static const char *kForced[] = {"", "FP8", "INT8", "INT8-2", "INT8 Lite"};
+  const std::string name = std::string(fsr4::kDriverVersionName) +
+                           (s.fsr4_model >= 1 && s.fsr4_model <= 4 ? std::string(", modèle imposé ") + kForced[s.fsr4_model]
+                                                                    : ", modèle attendu " + fsr4::expected_model(device_name()));
   {
     std::lock_guard lock(g_info_mutex);
     g_info.provider = name;

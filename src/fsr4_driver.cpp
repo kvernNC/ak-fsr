@@ -99,6 +99,8 @@ std::string model_label(std::string name) {
   return "";
 }
 
+std::atomic<int> g_model{0};  // modèle imposé (fsr4::model)
+
 // Nom de modèle dans les chaînes du SPIR-V (points d'entrée, OpString, OpName) : « fsr4_model… ».
 void note_model(const uint32_t *code, size_t words) {
   for (size_t i = 5; i < words;) {
@@ -112,8 +114,10 @@ void note_model(const uint32_t *code, size_t words) {
         std::lock_guard lock(g_mutex);
         if (g_info.model_seen.empty()) {
           g_info.model_seen = name;
-          g_info.model = model_label(name);
-          log(reshade::log::level::info, "modèle relevé dans les shaders : " + name);
+          if (g_model.load() <= 1) {  // INT8 : prepass au nom « fp8 », modèle fixé par create_context
+            g_info.model = model_label(name);
+            log(reshade::log::level::info, "modèle relevé dans les shaders : " + name);
+          }
         }
         return;
       }
@@ -194,7 +198,6 @@ PFN_vkVoidFunction VKAPI_CALL driver_get_device_proc_addr(VkDevice device, const
 }
 
 // --- GPU présenté au pilote (choix du modèle) ---------------------------------------------------------------
-std::atomic<int> g_model{0};
 PFN_vkGetPhysicalDeviceProperties g_real_props = nullptr;
 PFN_vkGetPhysicalDeviceProperties2 g_real_props2 = nullptr;
 
@@ -611,14 +614,14 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
     std::snprintf(buf, sizeof(buf), "shaders créés avec le contexte : %u, empreinte globale 0x%08X",
                   g_context_modules.load(), g_context_hash.load());
     log(reshade::log::level::info, buf);
-    // Les modèles INT8 compilent leurs shaders à la création (FP8 au premier dispatch, reconnu à leurs noms) :
-    // empreinte connue = INT8 relevé sur PC ; autre empreinte = autre variante (Lite attendu sur le Deck).
-    constexpr uint32_t kInt8Hash = 0x1BCF1FEB;  // RX 9070 XT, FP8 masqué (27/10/2026)
+    // Le nom relevé dans les shaders ne distingue pas les modèles (les INT8 gardent un prepass nommé « fp8 ») :
+    // hors FP8 et auto, modèle = famille présentée au pilote (vérifié au watermark le 30/10/2026).
+    static const char *kProviders[] = {"", "", "INT8 (FSR4-i8)", "INT8-2 (FSR4-i8-2)", "INT8 Lite (FSR4L-i8)"};
+    const int m = g_model.load();
     std::lock_guard lock(g_mutex);
     g_info.context_shaders = g_context_modules.load();
     g_info.context_hash = g_context_hash.load();
-    if (g_info.context_shaders > 0)
-      g_info.model = g_info.context_hash == kInt8Hash ? "INT8" : "INT8, autre variante (Lite probable)";
+    if (m >= 2 && m <= 4 && !g_profile.enabled) g_info.model = kProviders[m];
   }
   if (rc == FFX_API_RETURN_OK && g_provider.query != nullptr) {
     // Nom du provider effectivement créé par le pilote (FSR4-i8, FSR4-i8-2, FSR4L-i8…).
