@@ -34,6 +34,32 @@ ffxReturnCode_t query(ffxContext *context, ffxQueryDescHeader *desc);
 enum class model : int { automatic = 0, fp8 = 1, int8 = 2, int8_navi2 = 3, lite = 4 };
 void set_model(model m);
 
+// Watermark du pilote (nom du provider et modèle dessinés sur l'image) : variable d'environnement MLSR-WATERMARK,
+// lue par le pilote à la création du contexte. À régler avant create_context.
+void set_watermark(bool on);
+
+// M12b §3.2 — profil d'identité : GPU et pilote présentés en entier au pilote (par défaut Ryzen Z2 A sous pilote
+// AMD Windows), appliqué après le GPU du modèle imposé. Seul amdvkffx64.dll le voit : les DLL signées
+// amd_fidelityfx_*_vk.dll n'importent pas Vulkan (constaté), le jeu, DXVK et ReShade gardent la réponse réelle.
+// Réglages lus dans la section [FSR4.LiteProfile] de ReShade.ini au chargement (load()).
+struct identity_profile {
+  bool enabled = false;
+  uint32_t vendor_id = 0x1002;
+  uint32_t device_id = 0x163F;  // Van Gogh / Z2 A (identique au Deck)
+  VkPhysicalDeviceType device_type = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+  std::string device_name = "AMD Radeon(TM) Graphics";
+  uint32_t driver_version = VK_MAKE_API_VERSION(0, 2, 0, 999);  // valeur haute
+  VkDriverId driver_id = VK_DRIVER_ID_AMD_PROPRIETARY;
+  std::string driver_name = "AMD proprietary driver";
+  std::string driver_info = "26.10.1";  // version Adrenalin plausible
+  // Cœurs AMD (profil gpuinfo Z2 A sous RADV), seulement si le profil de base ne suffit pas.
+  bool spoof_shader_core = false;
+  uint32_t shader_engines = 1, arrays_per_engine = 1, cu_per_shader_array = 8, simd_per_cu = 2, waves_per_simd = 16,
+           wave_size = 64, active_cu_count = 8;
+};
+identity_profile &identity();  // à régler avant create_context
+std::string describe_identity();  // ligne pour le watermark / l'UI
+
 // Modèle attendu d'après le nom du GPU (RADV : « … (RADV GFX1201) »), logique d'AMD décrite au §8.1.
 std::string expected_model(const char *device_name);
 

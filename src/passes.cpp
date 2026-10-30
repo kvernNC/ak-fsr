@@ -88,12 +88,49 @@ void update_status(pass_status &s, bool found_now, const char *name) {
   s.found = found_now;
 }
 
+// M7.3 : état de mélange lié, et fenêtre des effets transparents (après la composition de l'éclairage, jusqu'au
+// SMAA / à l'insertion) : seuls les draws de cette fenêtre peuvent passer après FSR.
+uint64_t g_blend_state = 0;
+bool g_after_lighting = false;
+constexpr uint32_t kLightingCompositeCs[2] = {0xFE8D7315, 0x816CB5D7};
+
 void on_bind_pipeline(command_list *cmd, pipeline_stage stages, pipeline p) {
   if (!is_immediate(cmd)) return;
   if ((stages & pipeline_stage::compute_shader) != 0) g_cs.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
-  if ((stages & pipeline_stage::pixel_shader) != 0 &&
-      (g_smaa_option.load(std::memory_order_relaxed) || explorer::enabled()))
-    g_ps.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
+  // PS suivi en permanence : jitter des PS patchés (M6), effets transparents (M7.3), SMAA (M8.1).
+  if ((stages & pipeline_stage::pixel_shader) != 0) g_ps.hash = p.handle != 0 ? dump::shader_hash(p.handle) : 0;
+  if ((stages & pipeline_stage::output_merger) != 0) g_blend_state = p.handle;
+}
+
+// M7.3 : draw redirigé vers la couche d'effets transparents (composée après FSR) ? true : déjà dessiné.
+bool redirect_translucent(command_list *cmd, const rain::draw_call &d) {
+  if (g_ps.hash == kSmaaEdgePs) g_after_lighting = false;  // insertion au SMAA : FSR s'exécute ici
+  const bool rain_shader = rain::is_rain_shader(g_ps.hash);
+  if ((!rain_shader && !g_after_lighting) || !insertion::fsr_active()) return false;
+  const fsr::settings s = insertion::get_fsr_settings();
+  rain::blend_mode mode = rain::blend_mode::over;
+  if (!(rain_shader && s.rain_after_fsr)) {
+    if (!s.translucent_after_fsr || !g_after_lighting) return false;
+    dump::blend_rt0 b;  // énumérations ReShade : one = 1, source_alpha = 6, one_minus_source_alpha = 7, add = 0
+    if (!dump::blend_of(g_blend_state, b) || !b.enable || b.op != 0 || (b.mask & 7) != 7) return false;
+    if (b.src == 6 && b.dst == 7)
+      mode = rain::blend_mode::over;
+    else if (b.src == 1 && b.dst == 1)
+      mode = rain::blend_mode::additive_one;
+    else if (b.src == 6 && b.dst == 1)
+      mode = rain::blend_mode::additive_alpha;
+    else
+      return false;  // multiplicatif, soustractif… : reste avant FSR
+  }
+  uint64_t scene = 0;  // éclaboussures (validées sans ce filtre) : toute cible ; autres effets : l'image seulement
+  if (!(rain_shader && s.rain_after_fsr)) {
+    std::lock_guard lock(g_report_mutex);
+    scene = g_report.scene_color.handle;
+    if (scene == 0) return false;
+  }
+  return rain::redirect(reinterpret_cast<ID3D11Device *>(cmd->get_device()->get_native()),
+                        reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), d, mode,
+                        reinterpret_cast<ID3D11Resource *>(scene));
 }
 
 // M8.1 : SMAAEdgeDetection et SMAABlendingWeightCalculation sont sautées quand FSR remplace le SMAA.
@@ -108,13 +145,14 @@ bool skip_smaa_draw() {
 
 void bind_jitter_cb(device *dev, command_list *cmd, bool pixel_shader);  // M6, voir plus bas
 
-bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t, uint32_t) {
+bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance) {
   if (!is_immediate(cmd)) {
     explorer::on_deferred_draw();
     return false;
   }
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
+  if (!hidden && redirect_translucent(cmd, {false, vertices, instances, first_vertex, first_instance, 0})) return true;
   return skip_smaa_draw() || hidden;
 }
 // Draws indirects : explorateur seulement (les particules GPU, comme la pluie, passent souvent par là).
@@ -131,12 +169,8 @@ bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, ui
   }
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
-  if (!hidden && rain::is_rain_shader(g_ps.hash) && insertion::fsr_active() &&
-      insertion::get_fsr_settings().rain_after_fsr &&
-      rain::redirect(reinterpret_cast<ID3D11Device *>(cmd->get_device()->get_native()),
-                     reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), indices, instances, first_index,
-                     vertex_offset, first_instance))
-    return true;  // dessiné dans la couche de pluie
+  if (!hidden && redirect_translucent(cmd, {true, indices, instances, first_index, first_instance, vertex_offset}))
+    return true;  // dessiné dans la couche d'effets transparents
   return skip_smaa_draw() || hidden;
 }
 
@@ -309,7 +343,9 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   if (g_cs.hash == 0) return false;
   device *dev = cmd->get_device();
   if (shader_patch::needs_jitter_cb(g_cs.hash)) bind_jitter_cb(dev, cmd, false);
+  if (g_cs.hash == kLightingCompositeCs[0] || g_cs.hash == kLightingCompositeCs[1]) g_after_lighting = true;
   if (g_cs.hash == kInsertionCs) {
+    g_after_lighting = false;  // FSR s'exécute ici : la couche d'effets transparents est déjà composée
     g_current.insertion = true;
     explorer::on_insertion();
     note_view_cb(dev);
@@ -410,6 +446,7 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
   g_immediate = queue->get_immediate_command_list();
   explorer::on_present();
   rain::end_frame();
+  g_after_lighting = false;
   {
     std::lock_guard lock(g_report_mutex);
     ++g_report.frames;

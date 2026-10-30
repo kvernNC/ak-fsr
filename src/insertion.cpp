@@ -5,7 +5,6 @@
 
 #include "dxvk_interop.hpp"
 #include "exposure.hpp"
-#include "fsr_dx11.hpp"
 #include "highlights.hpp"
 #include "rain.hpp"
 #include "jitter.hpp"
@@ -28,7 +27,6 @@ fsr::settings g_fsr_settings;
 void on_destroy_device(device *) {
   highlights::shutdown();
   rain::shutdown();
-  fsr::dx11::shutdown();
   exposure::shutdown();
   vk::shutdown();
 }
@@ -45,18 +43,17 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "Sharpness", s.sharpness);
   reshade::set_config_value(nullptr, kSection, "PrevMatrix", static_cast<int>(s.prev_source));
   reshade::set_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
-  reshade::set_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::set_config_value(nullptr, kSection, "ToggleKey", g_toggle_key.load());
   reshade::set_config_value(nullptr, kSection, "Highlights", s.highlights);
   reshade::set_config_value(nullptr, kSection, "RainAfterFsr", s.rain_after_fsr);
+  reshade::set_config_value(nullptr, kSection, "TranslucentAfterFsr", s.translucent_after_fsr);
   reshade::set_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
-  reshade::set_config_value(nullptr, kSection, "Backend", static_cast<int>(s.fsr_backend));
   reshade::set_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
   reshade::set_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
   reshade::set_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::set_config_value(nullptr, kSection, "LodBias", s.lod_bias);
-  reshade::set_config_value(nullptr, kSection, "Fsr4Driver", s.fsr4_driver);
   reshade::set_config_value(nullptr, kSection, "Fsr4Model", s.fsr4_model);
+  reshade::set_config_value(nullptr, kSection, "Fsr4Watermark", s.fsr4_watermark);
   reshade::set_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
   reshade::set_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
   reshade::set_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
@@ -74,20 +71,17 @@ void load_settings() {
   int prev = static_cast<int>(s.prev_source);
   reshade::get_config_value(nullptr, kSection, "PrevMatrix", prev);
   if (prev >= 0 && prev <= static_cast<int>(fsr::prev_matrix::memory)) s.prev_source = static_cast<fsr::prev_matrix>(prev);
-  reshade::get_config_value(nullptr, kSection, "Version", s.version_id);
   reshade::get_config_value(nullptr, kSection, "ObjectVelocity", s.object_velocity);
   reshade::get_config_value(nullptr, kSection, "Highlights", s.highlights);
   reshade::get_config_value(nullptr, kSection, "RainAfterFsr", s.rain_after_fsr);
+  reshade::get_config_value(nullptr, kSection, "TranslucentAfterFsr", s.translucent_after_fsr);
   reshade::get_config_value(nullptr, kSection, "SmaaInsertion", s.smaa_insertion);
-  int backend = 0;
-  reshade::get_config_value(nullptr, kSection, "Backend", backend);
-  s.fsr_backend = backend == 1 ? fsr::backend::dx11 : fsr::backend::vulkan;
   reshade::get_config_value(nullptr, kSection, "GameMotionVectors", s.game_mv);
   reshade::get_config_value(nullptr, kSection, "GameMvScale", s.game_mv_scale);
   reshade::get_config_value(nullptr, kSection, "GameMvFlipY", s.game_mv_flip_y);
   reshade::get_config_value(nullptr, kSection, "LodBias", s.lod_bias);
-  reshade::get_config_value(nullptr, kSection, "Fsr4Driver", s.fsr4_driver);
   reshade::get_config_value(nullptr, kSection, "Fsr4Model", s.fsr4_model);
+  reshade::get_config_value(nullptr, kSection, "Fsr4Watermark", s.fsr4_watermark);
   reshade::get_config_value(nullptr, kSection, "GameExposure", s.game_exposure);
   reshade::get_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
   reshade::get_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
@@ -118,9 +112,7 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
   }
 
   device *dev = cmd->get_device();
-  // Backend DX11 (M8.2) : pas d'interop Vulkan.
-  const bool need_vk = m != mode::fsr || get_fsr_settings().fsr_backend == fsr::backend::vulkan || !fsr::dx11::available();
-  if (need_vk && !vk::init(reinterpret_cast<ID3D11Device *>(dev->get_native()))) {
+  if (!vk::init(reinterpret_cast<ID3D11Device *>(dev->get_native()))) {
     if (!g_logged_failure.exchange(true)) {
       reshade::log::message(reshade::log::level::error, ("AK-FSR: interop Vulkan indisponible : " + vk::status()).c_str());
     }
@@ -153,7 +145,20 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     const bool ok = fsr::run(in, s);  // les échecs sont journalisés par fsr
     // Aussi après un échec : la couleur d'entrée retrouve ses hautes lumières.
     if (split) highlights::reinject(native, imm, ok && in.output != nullptr ? in.output : color);
-    rain::composite(native, imm, ok && in.output != nullptr ? in.output : color);  // aussi après un échec
+    {
+      // Couche d'effets transparents, lue décalée du jitter de la frame (aussi après un échec de FSR).
+      float jx = 0, jy = 0;
+      jitter::recover_from_view(in.view.data(), jx, jy);
+      ID3D11Resource *target = ok && in.output != nullptr ? in.output : color;
+      ID3D11Texture2D *tex = nullptr;
+      D3D11_TEXTURE2D_DESC desc{};
+      if (SUCCEEDED(target->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&tex)))) {
+        tex->GetDesc(&desc);
+        tex->Release();
+      }
+      rain::composite(native, imm, target, jx * static_cast<float>(desc.Width) * 0.5f,
+                      -jy * static_cast<float>(desc.Height) * 0.5f);
+    }
     return ok;
   }
 

@@ -26,7 +26,7 @@
 #include "dev_tools.hpp"
 #endif
 
-extern "C" __declspec(dllexport) const char *NAME = "AK-FSR";
+extern "C" __declspec(dllexport) const char *NAME = "AK-FSR4-Linux-AMD";
 extern "C" __declspec(dllexport) const char *DESCRIPTION =
     "AA temporel FSR pour Batman: Arkham Knight (v" AKFSR_VERSION ")";
 
@@ -52,12 +52,10 @@ void log_environment(const std::filesystem::path &dir) {
   std::error_code ec;
   auto present = [&](const std::filesystem::path &p) { return std::filesystem::exists(p, ec) ? "oui" : "non"; };
   log_fmt(reshade::log::level::info,
-          "AK-FSR: diagnostic : amd_fidelityfx_vk.dll %s, ak-fsr-dx11.dll %s, d3dcompiler_47 %s",
-          present(dir / "amd_fidelityfx_vk.dll"), present(dir / "ak-fsr-dx11.dll"),
-          LoadLibraryW(L"d3dcompiler_47.dll") != nullptr ? "oui" : "non");
-  const auto amd = dir / "ak-fsr";
+          "AK-FSR: diagnostic : d3dcompiler_47 %s", LoadLibraryW(L"d3dcompiler_47.dll") != nullptr ? "oui" : "non");
+  const auto amd = dir / "ak-fsr4-linux-amd";
   log_fmt(reshade::log::level::info,
-          "AK-FSR: diagnostic : ak-fsr\\ amdvkffx64.dll %s, amd_fidelityfx_loader_vk.dll %s, "
+          "AK-FSR: diagnostic : ak-fsr4-linux-amd\\ amdvkffx64.dll %s, amd_fidelityfx_loader_vk.dll %s, "
           "amd_fidelityfx_upscaler_vk.dll %s",
           present(amd / "amdvkffx64.dll"), present(amd / "amd_fidelityfx_loader_vk.dll"),
           present(amd / "amd_fidelityfx_upscaler_vk.dll"));
@@ -111,12 +109,13 @@ void toggle_key_row() {
 }
 
 
-// Modèle FSR 4 imposé au pilote : Auto (son choix d'après le GPU), FP8 ou INT8. Les variantes INT8 (RDNA 3,
-// RDNA 2, Lite) ne se distinguent pas ainsi : FP8 masqué, le pilote crée toujours le même INT8 (constaté sur PC,
-// shaders identiques) ; sur le Deck, Auto laisse le pilote choisir d'après le vrai matériel.
+// Modèle FSR 4 imposé au pilote (ordre de fsr4::model) : Auto (son choix d'après le GPU), FP8, INT8, INT8-2 ou
+// Lite, par le GPU présenté au pilote et les capacités masquées. Sur PC, les trois INT8 donnaient jusqu'ici les mêmes
+// shaders : le nom du provider créé (« choisi par le pilote ») et le watermark (MLSR-WATERMARK) font foi.
 bool fsr4_model_combo(akfsr::fsr::settings &s) {
-  static const char *models[] = {"Auto (choix du pilote)", "FP8 (RDNA 4)", "INT8"};
-  int choice = std::clamp(s.fsr4_model, 0, 2);
+  static const char *models[] = {"Auto (choix du pilote)", "FP8 (RDNA 4)", "INT8 (RDNA 3)", "INT8-2 (RDNA 2)",
+                                 "INT8 Lite (Deck)"};
+  int choice = std::clamp(s.fsr4_model, 0, 4);
   ImGui::SetNextItemWidth(200);
   if (!ImGui::Combo("Modèle FSR 4", &choice, models, static_cast<int>(std::size(models)))) return false;
   s.fsr4_model = choice;
@@ -126,41 +125,31 @@ bool fsr4_model_combo(akfsr::fsr::settings &s) {
 #if !AKFSR_DEV_TOOLS
 // Version publiée : un seul choix, l'AA utilisé ; le reste suit les réglages validés (voir fsr.hpp).
 void on_overlay(reshade::api::effect_runtime *) {
-  ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " : anti-aliasing FSR");
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " : anti-aliasing FSR 4");
   ImGui::Separator();
   auto s = akfsr::insertion::get_fsr_settings();
   const auto info = akfsr::fsr::get_info();
   const auto driver = akfsr::fsr4::get_info();
-  const bool fsr4_possible = s.fsr4_driver && akfsr::vk_device_hook::get_status().device_seen && !(driver.tried && !driver.ok);
+  const bool fsr4_possible = akfsr::vk_device_hook::get_status().device_seen && !(driver.tried && !driver.ok);
   const bool off = akfsr::insertion::get_mode() == akfsr::insertion::mode::off;
-  int choice = off ? 0 : (s.version_id == akfsr::fsr4::kDriverVersionId ? 2 : 1);
+  int choice = off ? 0 : 1;
   bool changed = ImGui::RadioButton("Off", &choice, 0);
+  ImGui::BeginDisabled(!fsr4_possible && off);
   ImGui::SameLine();
-  changed |= ImGui::RadioButton("FSR 3.1", &choice, 1);
-  ImGui::BeginDisabled(!fsr4_possible);
-  ImGui::SameLine();
-  changed |= ImGui::RadioButton("FSR 4", &choice, 2);
+  changed |= ImGui::RadioButton("FSR 4", &choice, 1);
   ImGui::EndDisabled();
-  if (changed) {
+  if (changed)
     akfsr::insertion::set_mode(choice == 0 ? akfsr::insertion::mode::off : akfsr::insertion::mode::fsr);
-    if (choice != 0) {
-      s.version_id = choice == 2 ? akfsr::fsr4::kDriverVersionId : 0;
-      // FSR 4 : chemin Vulkan obligatoire ; FSR 3.1 : backend par défaut (DX11, plus rapide, repli Vulkan).
-      s.fsr_backend = choice == 2 ? akfsr::fsr::backend::vulkan : static_cast<akfsr::fsr::backend>(akfsr::fsr::kDefaultBackend);
-      akfsr::insertion::set_fsr_settings(s);
-    }
+  if (!fsr4_possible) {
+    ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr4-linux-amd\\ ou pilote incompatible (voir README)");
+  } else {
+    bool model_changed = fsr4_model_combo(s);
+    ImGui::SameLine();
+    model_changed |= ImGui::Checkbox("Watermark du pilote", &s.fsr4_watermark);
+    if (model_changed) akfsr::insertion::set_fsr_settings(s);
+    ImGui::Text("Version : FSR %s", akfsr::fsr4::kDriverVersionName);
+    ImGui::Text("Modèle utilisé : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
   }
-  if (!fsr4_possible)
-    ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr\\ ou pilote incompatible (voir README)");
-  else if (choice == 2) {
-    if (fsr4_model_combo(s)) akfsr::insertion::set_fsr_settings(s);
-    ImGui::Text("Modèle choisi par le pilote : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
-    if (driver.context_shaders > 0)
-      ImGui::TextDisabled("(%u shaders, empreinte 0x%08X)", driver.context_shaders, driver.context_hash);
-  }
-  if (!info.fsr4_status.empty())
-    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 indisponible, repli sur FSR 3.1 : %s",
-                       info.fsr4_status.c_str());
   if (!off && !info.status.empty() && info.status.rfind("actif", 0) != 0)
     ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.4f, 1.0f), "FSR : %s", info.status.c_str());
 }
@@ -168,11 +157,11 @@ void on_overlay(reshade::api::effect_runtime *) {
 void on_overlay(reshade::api::effect_runtime *) {
   akfsr::fsr::note_overlay_visible();
 #if AKFSR_DEV_TOOLS
-  ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION " (développement, " AKFSR_MILESTONE ")");
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " (développement, " AKFSR_MILESTONE ")");
   ImGui::Separator();
   akfsr::dev::draw_passes();
 #else
-  ImGui::TextUnformatted("AK-FSR " AKFSR_VERSION);
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION);
 #endif
   ImGui::Separator();
   int mode = static_cast<int>(akfsr::insertion::get_mode());
@@ -189,36 +178,10 @@ void on_overlay(reshade::api::effect_runtime *) {
   auto fsr_settings = akfsr::insertion::get_fsr_settings();
   bool fsr_changed = false;
   const auto fsr_info = akfsr::fsr::get_info();
-  // M10.3 : versions de amd_fidelityfx_vk.dll (2.3.3, 3.1.4…) + FSR 4.1.2 du provider pilote.
-  auto versions = fsr_info.versions;
-  const auto driver = akfsr::fsr4::get_info();
-  if (fsr_settings.fsr4_driver) {
-    std::string label = akfsr::fsr4::kDriverVersionName;
-    if (driver.tried && !driver.ok) label += " - indisponible";
-    else if (!driver.model.empty()) label += " - " + driver.model;
-    versions.emplace_back(akfsr::fsr4::kDriverVersionId, label);
-  }
-  if (!versions.empty() && fsr_settings.fsr_backend == akfsr::fsr::backend::vulkan) {
-    std::string current = "défaut (" + fsr_info.provider + ")";
-    for (const auto &[id, name] : versions)
-      if (id == fsr_settings.version_id) current = name;
-    if (ImGui::BeginCombo("Version FSR", current.c_str())) {
-      if (ImGui::Selectable("défaut", fsr_settings.version_id == 0)) {
-        fsr_settings.version_id = 0;
-        fsr_changed = true;
-      }
-      for (const auto &[id, name] : versions) {
-        if (ImGui::Selectable(name.c_str(), fsr_settings.version_id == id)) {
-          fsr_settings.version_id = id;
-          fsr_changed = true;
-        }
-      }
-      ImGui::EndCombo();
-    }
-  }
-  fsr_changed |= ImGui::Checkbox("FSR 4 du pilote AMD (au prochain lancement)", &fsr_settings.fsr4_driver);
-  if (fsr_settings.version_id == akfsr::fsr4::kDriverVersionId) {
-    fsr_changed |= fsr4_model_combo(fsr_settings);
+  fsr_changed |= fsr4_model_combo(fsr_settings);
+  ImGui::SameLine();
+  fsr_changed |= ImGui::Checkbox("Watermark", &fsr_settings.fsr4_watermark);
+  {
     const auto driver_info = akfsr::fsr4::get_info();
     ImGui::SameLine();
     ImGui::Text("choisi par le pilote : %s (%u shaders, empreinte 0x%08X)",
@@ -226,18 +189,6 @@ void on_overlay(reshade::api::effect_runtime *) {
                 driver_info.context_hash);
   }
   fsr_changed |= ImGui::Checkbox("Remplacer le SMAA du jeu (AA du jeu sur On)", &fsr_settings.smaa_insertion);
-  {
-    int backend = static_cast<int>(fsr_settings.fsr_backend);
-    ImGui::TextUnformatted("Backend FSR 3 :");
-    ImGui::SameLine();
-    bool backend_changed = ImGui::RadioButton("Vulkan", &backend, 0);
-    ImGui::SameLine();
-    backend_changed |= ImGui::RadioButton("DX11 natif", &backend, 1);
-    if (backend_changed) {
-      fsr_settings.fsr_backend = static_cast<akfsr::fsr::backend>(backend);
-      fsr_changed = true;
-    }
-  }
   ImGui::SetNextItemWidth(160);
   fsr_changed |= ImGui::SliderFloat("Biais de LOD (au prochain lancement ; -1 conseillé)", &fsr_settings.lod_bias,
                                     -2.0f, 0.0f, "%.2f");
@@ -247,6 +198,8 @@ void on_overlay(reshade::api::effect_runtime *) {
   fsr_changed |= ImGui::Checkbox("Hautes lumières hors FSR", &fsr_settings.highlights);
   ImGui::SameLine();
   fsr_changed |= ImGui::Checkbox("Pluie après FSR", &fsr_settings.rain_after_fsr);
+  ImGui::SameLine();
+  fsr_changed |= ImGui::Checkbox("Effets transparents après FSR", &fsr_settings.translucent_after_fsr);
   if (fsr_settings.highlights) {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(160);
@@ -260,9 +213,6 @@ void on_overlay(reshade::api::effect_runtime *) {
 
   ImGui::Separator();
   if (!fsr_info.provider.empty()) ImGui::Text("Version utilisée : %s", fsr_info.provider.c_str());
-  if (!fsr_info.fsr4_status.empty())
-    ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "FSR 4 indisponible, repli sur FSR 3.1 : %s",
-                       fsr_info.fsr4_status.c_str());
   ImGui::TextWrapped("FSR : %s", fsr_info.status.empty() ? "inactif" : fsr_info.status.c_str());
   if (akfsr::insertion::get_mode() == akfsr::insertion::mode::fsr && !akfsr::jitter::get_status().installed)
     ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "Jitter indisponible (version du jeu ?)");
@@ -290,18 +240,8 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       akfsr::passes::register_events();
       akfsr::insertion::register_events();
       akfsr::jitter::install();
-#if !AKFSR_DEV_TOOLS
-      // Version publiée : FSR 4 proposé dès que la DLL du pilote AMD est en place.
-      if (std::error_code ec; std::filesystem::exists(g_addon_dir / "ak-fsr" / "amdvkffx64.dll", ec)) {
-        auto s = akfsr::insertion::get_fsr_settings();
-        if (!s.fsr4_driver) {
-          s.fsr4_driver = true;
-          akfsr::insertion::set_fsr_settings(s);
-        }
-      }
-#endif
       // M10.2 : avant la création du device de DXVK (ReShade charge les addons dans D3D11CreateDevice).
-      if (akfsr::insertion::get_fsr_settings().fsr4_driver) akfsr::vk_device_hook::install();
+      akfsr::vk_device_hook::install();
       reshade::register_overlay("AK-FSR", on_overlay);
       reshade::log::message(reshade::log::level::info,
                             "AK-FSR: addon loaded (v" AKFSR_VERSION AKFSR_BUILD_KIND ")");

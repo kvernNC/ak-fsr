@@ -99,6 +99,8 @@ std::string model_label(std::string name) {
   return "";
 }
 
+std::atomic<int> g_model{0};  // modèle imposé (fsr4::model)
+
 // Nom de modèle dans les chaînes du SPIR-V (points d'entrée, OpString, OpName) : « fsr4_model… ».
 void note_model(const uint32_t *code, size_t words) {
   for (size_t i = 5; i < words;) {
@@ -112,8 +114,10 @@ void note_model(const uint32_t *code, size_t words) {
         std::lock_guard lock(g_mutex);
         if (g_info.model_seen.empty()) {
           g_info.model_seen = name;
-          g_info.model = model_label(name);
-          log(reshade::log::level::info, "modèle relevé dans les shaders : " + name);
+          if (g_model.load() <= 1) {  // INT8 : prepass au nom « fp8 », modèle fixé par create_context
+            g_info.model = model_label(name);
+            log(reshade::log::level::info, "modèle relevé dans les shaders : " + name);
+          }
         }
         return;
       }
@@ -194,7 +198,6 @@ PFN_vkVoidFunction VKAPI_CALL driver_get_device_proc_addr(VkDevice device, const
 }
 
 // --- GPU présenté au pilote (choix du modèle) ---------------------------------------------------------------
-std::atomic<int> g_model{0};
 PFN_vkGetPhysicalDeviceProperties g_real_props = nullptr;
 PFN_vkGetPhysicalDeviceProperties2 g_real_props2 = nullptr;
 
@@ -212,6 +215,84 @@ constexpr spoof kSpoofs[] = {
 };
 
 std::atomic<int> g_identity_logs{0};  // remis à zéro à chaque création de contexte
+identity_profile g_profile;
+
+void copy_str(char *dst, size_t cap, const std::string &s) { std::snprintf(dst, cap, "%s", s.c_str()); }
+
+void read_str(const char *key, std::string &value) {
+  char buf[256];
+  size_t size = sizeof(buf);
+  if (reshade::get_config_value(nullptr, "FSR4.LiteProfile", key, buf, &size)) value = buf;
+}
+
+template <typename T>
+void read_u32(const char *key, T &value) {  // décimal ou 0x…
+  std::string s;
+  read_str(key, s);
+  if (!s.empty()) value = static_cast<T>(std::strtoul(s.c_str(), nullptr, 0));
+}
+
+void load_identity_config() {
+  auto &c = g_profile;
+  reshade::get_config_value(nullptr, "FSR4.LiteProfile", "Enabled", c.enabled);
+  read_u32("LiteVendorId", c.vendor_id);
+  read_u32("LiteDeviceId", c.device_id);
+  read_u32("LiteDeviceType", c.device_type);
+  read_str("LiteDeviceName", c.device_name);
+  read_u32("LiteDriverVersion", c.driver_version);
+  read_u32("LiteDriverId", c.driver_id);
+  read_str("LiteDriverName", c.driver_name);
+  read_str("LiteDriverInfo", c.driver_info);
+  reshade::get_config_value(nullptr, "FSR4.LiteProfile", "SpoofShaderCore", c.spoof_shader_core);
+  if (c.enabled) log(reshade::log::level::info, describe_identity());
+}
+
+void apply_identity(VkPhysicalDeviceProperties &p) {
+  p.vendorID = g_profile.vendor_id;
+  p.deviceID = g_profile.device_id;
+  p.deviceType = g_profile.device_type;
+  p.driverVersion = g_profile.driver_version;
+  copy_str(p.deviceName, sizeof(p.deviceName), g_profile.device_name);
+}
+
+void apply_identity_chain(void *next) {
+  const auto &c = g_profile;
+  for (auto *s = static_cast<VkBaseOutStructure *>(next); s != nullptr; s = s->pNext) {
+    switch (s->sType) {
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES: {
+        auto *d = reinterpret_cast<VkPhysicalDeviceDriverProperties *>(s);
+        d->driverID = c.driver_id;
+        copy_str(d->driverName, sizeof(d->driverName), c.driver_name);
+        copy_str(d->driverInfo, sizeof(d->driverInfo), c.driver_info);
+        break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES: {
+        auto *v = reinterpret_cast<VkPhysicalDeviceVulkan12Properties *>(s);
+        v->driverID = c.driver_id;
+        copy_str(v->driverName, sizeof(v->driverName), c.driver_name);
+        copy_str(v->driverInfo, sizeof(v->driverInfo), c.driver_info);
+        break;
+      }
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD:
+        if (c.spoof_shader_core) {
+          auto *a = reinterpret_cast<VkPhysicalDeviceShaderCorePropertiesAMD *>(s);
+          a->shaderEngineCount = c.shader_engines;
+          a->shaderArraysPerEngineCount = c.arrays_per_engine;
+          a->computeUnitsPerShaderArray = c.cu_per_shader_array;
+          a->simdPerComputeUnit = c.simd_per_cu;
+          a->wavefrontsPerSimd = c.waves_per_simd;
+          a->wavefrontSize = c.wave_size;
+        }
+        break;
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD:
+        if (c.spoof_shader_core)
+          reinterpret_cast<VkPhysicalDeviceShaderCoreProperties2AMD *>(s)->activeComputeUnitCount = c.active_cu_count;
+        break;
+      default:
+        break;
+    }
+  }
+}
 
 void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
   if (g_identity_logs.fetch_add(1) < 4) {
@@ -220,6 +301,7 @@ void apply_spoof(VkPhysicalDeviceProperties &p, const char *call) {
                   p.deviceID, p.deviceName);
     log(reshade::log::level::info, buf);
   }
+  if (g_profile.enabled) return apply_identity(p);  // profil complet : remplace aussi le GPU du modèle
   const int m = g_model.load();
   if (m <= 0 || m >= static_cast<int>(std::size(kSpoofs)) || p.vendorID != 0x1002) return;
   p.deviceID = kSpoofs[m].device_id;
@@ -244,6 +326,17 @@ VKAPI_ATTR void VKAPI_CALL hooked_props2(VkPhysicalDevice physical, VkPhysicalDe
     log(reshade::log::level::info, "vkGetPhysicalDeviceProperties2 : structures demandées :" + (chain.empty() ? std::string(" aucune") : chain));
   }
   apply_spoof(p->properties, "vkGetPhysicalDeviceProperties2");
+  if (g_profile.enabled) apply_identity_chain(p->pNext);
+  // Le pilote garde en cache la famille du GPU (déduite de l'identifiant) sous le LUID : sans LUID propre au modèle,
+  // le premier GPU lu (le vrai, FP8) resservirait aux contextes suivants (constaté, amdvkffx64.dll 4.1.2).
+  const int m = g_profile.enabled ? 0x80 : g_model.load();
+  if (m <= 0) return;
+  for (auto *s = static_cast<VkBaseOutStructure *>(p->pNext); s != nullptr; s = s->pNext) {
+    if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES)
+      reinterpret_cast<VkPhysicalDeviceIDProperties *>(s)->deviceLUID[7] ^= static_cast<uint8_t>(0x40 | m);
+    else if (s->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES)
+      reinterpret_cast<VkPhysicalDeviceVulkan11Properties *>(s)->deviceLUID[7] ^= static_cast<uint8_t>(0x40 | m);
+  }
 }
 
 // Capacités masquées au pilote selon le modèle imposé (il choisit aussi d'après elles : constaté, l'identité
@@ -310,7 +403,69 @@ VKAPI_ATTR VkResult VKAPI_CALL hooked_enum_ext(VkPhysicalDevice physical, const 
   return copied < kept.size() ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
-// Remplace dans la table d'imports de `module` les fonctions de vulkan-1.dll nommées.
+// Famille et révision du GPU : le pilote ne les lit pas par Vulkan mais dans les données privées du pilote noyau
+// (gdi32!D3DKMTQueryAdapterInfo, type KMTQAITYPE_UMDRIVERPRIVATE, chargée par GetProcAddress), puis choisit le
+// premier provider qui l'accepte : FP8, i8 (famille 0x91), i8-2 (0x8F, rév. 0x28-0x4F), Lite (0x90) ; aucun → repli
+// sans modèle (constaté, amdvkffx64.dll 4.1.2). Deux formats : 0x260 octets (famille +0x30, rév. +0x34) ou, si
+// celui-ci est refusé (STATUS_BUFFER_TOO_SMALL), n adaptateurs (nombre +8, vendeur +0xC+2i, appareil +0x14+2i,
+// famille +0x1364+0x3A00i, rév. +0x1368+0x3A00i), où le pilote cherche l'identifiant présenté par Vulkan.
+struct kmt_query_adapter_info {
+  uint32_t adapter;
+  uint32_t type;
+  void *data;
+  uint32_t size;
+};
+using kmt_query_fn = LONG(APIENTRY *)(kmt_query_adapter_info *);
+kmt_query_fn g_real_kmt_query = nullptr;
+
+struct kmt_family {
+  uint32_t family, revision;
+};
+constexpr kmt_family kKmtFamilies[] = {{0, 0}, {0, 0}, {0x91, 0x01}, {0x8F, 0x28}, {0x90, 0x01}};
+
+LONG APIENTRY hooked_kmt_query(kmt_query_adapter_info *q) {
+  const LONG rc = g_real_kmt_query(q);
+  const int m = g_model.load();
+  if (rc < 0 || q == nullptr || q->type != 0 || q->data == nullptr || m < 2 || m > 4 || g_profile.enabled) return rc;
+  const kmt_family f = kKmtFamilies[m];
+  auto *d = static_cast<uint8_t *>(q->data);
+  auto put = [&](size_t at, uint32_t v) {
+    if (at + 4 <= q->size) std::memcpy(d + at, &v, 4);
+  };
+  if (q->size == 0x260) {
+    put(0x30, f.family);
+    put(0x34, f.revision);
+  } else if (q->size >= 0x4360) {
+    uint32_t n = 0;
+    std::memcpy(&n, d + 8, 4);
+    for (uint32_t i = 0; i < std::min<uint32_t>(n, 4); ++i) {
+      const uint16_t vendor = *reinterpret_cast<uint16_t *>(d + 0xC + 2 * i);
+      if (vendor != 0x1002) continue;
+      *reinterpret_cast<uint16_t *>(d + 0x14 + 2 * i) = static_cast<uint16_t>(kSpoofs[m].device_id);
+      put(0x1364 + 0x3A00 * i, f.family);
+      put(0x1368 + 0x3A00 * i, f.revision);
+    }
+  }
+  static std::atomic<int> logs{0};
+  if (logs.fetch_add(1) < 8) {
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "D3DKMTQueryAdapterInfo lu par le pilote : %u octets, famille présentée 0x%02X rév. 0x%02X",
+                  q->size, f.family, f.revision);
+    log(reshade::log::level::info, buf);
+  }
+  return rc;
+}
+
+FARPROC WINAPI hooked_get_proc(HMODULE module, LPCSTR name) {
+  FARPROC f = GetProcAddress(module, name);
+  if (f != nullptr && reinterpret_cast<uintptr_t>(name) > 0xFFFF && std::strcmp(name, "D3DKMTQueryAdapterInfo") == 0) {
+    g_real_kmt_query = reinterpret_cast<kmt_query_fn>(f);
+    return reinterpret_cast<FARPROC>(&hooked_kmt_query);
+  }
+  return f;
+}
+
+// Remplace dans la table d'imports de `module` les fonctions de vulkan-1.dll nommées (et GetProcAddress).
 int patch_imports(HMODULE module) {
   auto *base = reinterpret_cast<uint8_t *>(module);
   const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
@@ -319,7 +474,9 @@ int patch_imports(HMODULE module) {
   if (dir.VirtualAddress == 0) return 0;
   int patched = 0;
   for (auto *imp = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR *>(base + dir.VirtualAddress); imp->Name != 0; ++imp) {
-    if (_stricmp(reinterpret_cast<const char *>(base + imp->Name), "vulkan-1.dll") != 0) continue;
+    const char *dll = reinterpret_cast<const char *>(base + imp->Name);
+    const bool kernel32 = _stricmp(dll, "kernel32.dll") == 0;
+    if (!kernel32 && _stricmp(dll, "vulkan-1.dll") != 0) continue;
     auto *names = reinterpret_cast<IMAGE_THUNK_DATA64 *>(base + imp->OriginalFirstThunk);
     auto *slots = reinterpret_cast<IMAGE_THUNK_DATA64 *>(base + imp->FirstThunk);
     for (; names->u1.AddressOfData != 0; ++names, ++slots) {
@@ -327,7 +484,9 @@ int patch_imports(HMODULE module) {
       const char *name = reinterpret_cast<const char *>(
           reinterpret_cast<IMAGE_IMPORT_BY_NAME *>(base + names->u1.AddressOfData)->Name);
       void *replacement = nullptr;
-      if (std::strcmp(name, "vkGetPhysicalDeviceProperties") == 0) {
+      if (kernel32) {
+        if (std::strcmp(name, "GetProcAddress") == 0) replacement = reinterpret_cast<void *>(&hooked_get_proc);
+      } else if (std::strcmp(name, "vkGetPhysicalDeviceProperties") == 0) {
         g_real_props = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(slots->u1.Function);
         replacement = reinterpret_cast<void *>(&hooked_props);
       } else if (std::strcmp(name, "vkGetPhysicalDeviceProperties2") == 0) {
@@ -368,7 +527,7 @@ bool load() {
     if (g_info.tried) return g_info.ok;
     g_info.tried = true;
   }
-  const std::wstring dir = addon_dir() + L"ak-fsr\\";
+  const std::wstring dir = addon_dir() + L"ak-fsr4-linux-amd\\";
   // Le pilote ne donne ses providers qu'en présence de DLL du SDK signées par AMD (§8.1).
   int signed_loaded = 0;
   for (const wchar_t *name : {L"amd_fidelityfx_loader_vk.dll", L"amd_fidelityfx_upscaler_vk.dll"}) {
@@ -376,15 +535,16 @@ bool load() {
       ++signed_loaded;
     } else {
       char buf[160];
-      std::snprintf(buf, sizeof(buf), "%ls introuvable dans ak-fsr\\ (erreur %lu)", name, GetLastError());
+      std::snprintf(buf, sizeof(buf), "%ls introuvable dans ak-fsr4-linux-amd\\ (erreur %lu)", name, GetLastError());
       log(reshade::log::level::warning, buf);
     }
   }
   HMODULE driver = LoadLibraryW((dir + L"amdvkffx64.dll").c_str());
   if (driver == nullptr) driver = GetModuleHandleW(L"amdvkffx64.dll");
   if (driver == nullptr)
-    return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr\\ (erreur " + std::to_string(GetLastError()) +
+    return fail("amdvkffx64.dll introuvable dans Binaries\\Win64\\ak-fsr4-linux-amd\\ (erreur " + std::to_string(GetLastError()) +
                 ")");
+  load_identity_config();  // avant UpdateFfxApiProviderEx, qui peut déjà interroger le GPU
   {
     const int patched = patch_imports(driver);
     log(patched == 4 ? reshade::log::level::info : reshade::log::level::warning,
@@ -454,14 +614,14 @@ ffxReturnCode_t create_context(ffxContext *context, ffxCreateContextDescHeader *
     std::snprintf(buf, sizeof(buf), "shaders créés avec le contexte : %u, empreinte globale 0x%08X",
                   g_context_modules.load(), g_context_hash.load());
     log(reshade::log::level::info, buf);
-    // Les modèles INT8 compilent leurs shaders à la création (FP8 au premier dispatch, reconnu à leurs noms) :
-    // empreinte connue = INT8 relevé sur PC ; autre empreinte = autre variante (Lite attendu sur le Deck).
-    constexpr uint32_t kInt8Hash = 0x1BCF1FEB;  // RX 9070 XT, FP8 masqué (27/10/2026)
+    // Le nom relevé dans les shaders ne distingue pas les modèles (les INT8 gardent un prepass nommé « fp8 ») :
+    // hors FP8 et auto, modèle = famille présentée au pilote (vérifié au watermark le 30/10/2026).
+    static const char *kProviders[] = {"", "", "INT8 (FSR4-i8)", "INT8-2 (FSR4-i8-2)", "INT8 Lite (FSR4L-i8)"};
+    const int m = g_model.load();
     std::lock_guard lock(g_mutex);
     g_info.context_shaders = g_context_modules.load();
     g_info.context_hash = g_context_hash.load();
-    if (g_info.context_shaders > 0)
-      g_info.model = g_info.context_hash == kInt8Hash ? "INT8" : "INT8, autre variante (Lite probable)";
+    if (m >= 2 && m <= 4 && !g_profile.enabled) g_info.model = kProviders[m];
   }
   if (rc == FFX_API_RETURN_OK && g_provider.query != nullptr) {
     // Nom du provider effectivement créé par le pilote (FSR4-i8, FSR4-i8-2, FSR4L-i8…).
@@ -507,6 +667,22 @@ void set_model(model m) {
   }
 }
 
+void set_watermark(bool on) {
+  // Le pilote lit l'environnement du CRT partagé (ucrtbase, via api-ms-win-crt-environment) : celui de l'addon est
+  // statique, son _putenv_s ne le toucherait pas. Valeur vide = variable supprimée.
+  using putenv_fn = int(__cdecl *)(const char *, const char *);
+  static const auto put = reinterpret_cast<putenv_fn>(GetProcAddress(LoadLibraryW(L"ucrtbase.dll"), "_putenv_s"));
+  static std::atomic<int> last{-1};
+  if (put == nullptr) {
+    if (last.exchange(-2) != -2) log(reshade::log::level::warning, "watermark : _putenv_s absent de ucrtbase.dll");
+    return;
+  }
+  put("MLSR-WATERMARK", on ? "1" : "");
+  SetEnvironmentVariableW(L"MLSR-WATERMARK", on ? L"1" : nullptr);
+  if (last.exchange(on ? 1 : 0) != (on ? 1 : 0))
+    log(reshade::log::level::info, on ? "watermark du pilote activé" : "watermark du pilote désactivé");
+}
+
 std::string expected_model(const char *device_name) {
   const std::string n = device_name != nullptr ? device_name : "";
   auto has = [&](const char *s) { return n.find(s) != std::string::npos; };
@@ -516,6 +692,16 @@ std::string expected_model(const char *device_name) {
   if (has("GFX11")) return "INT8 (RDNA 3)";
   if (has("GFX103")) return "INT8-2 (RDNA 2)";
   return "inconnu";
+}
+
+identity_profile &identity() { return g_profile; }
+
+std::string describe_identity() {
+  const auto &c = g_profile;
+  char buf[256];
+  std::snprintf(buf, sizeof(buf), "profil d'identité : %s (0x%04x:0x%04x « %s », %s %s)", c.enabled ? "actif" : "inactif",
+                c.vendor_id, c.device_id, c.device_name.c_str(), c.driver_name.c_str(), c.driver_info.c_str());
+  return buf;
 }
 
 info get_info() {
