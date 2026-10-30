@@ -1,154 +1,117 @@
-# AK-FSR
+# AK-FSR4-Linux-AMD
 
-Addon ReShade qui ajoute un **anti-aliasing temporel FSR** (AA natif, sans upscaling) à
-**Batman: Arkham Knight**, sous **Proton** (Linux, Steam Deck), sans GPU NVIDIA.
+**AMD FSR 4 anti-aliasing for Batman: Arkham Knight, on Linux / Proton with an AMD GPU.**
 
-Il reprend la *méthode* du mod « Native DLSS Anti Aliasing for Arkham Knight » (jitter de la projection,
-vecteurs de mouvement, insertion avant le post-traitement), réimplémentée de zéro, avec FSR à la place de DLAA.
+A [ReShade](https://reshade.me) add-on that replaces the game's SMAA with FSR 4 as native-resolution temporal
+anti-aliasing (no upscaling): the game renders at your resolution, FSR 4 removes aliasing and shimmering.
 
-> Projet personnel, expérimental. Testé avec la version Steam 1.6.2.0 du jeu, sur PC (RX 9070 XT, CachyOS)
-> et Steam Deck OLED. Windows n'est pas une cible.
+> **Linux (Proton) + AMD Radeon only.** The add-on talks to FSR 4 through DXVK's Vulkan interop and AMD's FSR 4
+> driver library. It does not work on Windows, nor on NVIDIA / Intel GPUs.
+>
+> Personal, experimental project. Tested with the Steam version 1.6.2.0 of the game on an RX 9070 XT
+> (CachyOS, Mesa RADV).
 
-## Ce que fait l'addon
+## Features
 
-- **Jitter** : détour de `FPerspectiveMatrix` (UE3) dans `BatmanAK.exe`, trouvée par motif d'octets ;
-  séquence de Halton appliquée à la seule vue principale (apprise automatiquement).
-- **Vecteurs de mouvement** : caméra par reprojection de la profondeur (matrices du CB « View »), objets
-  mobiles depuis la vélocité du G-buffer du jeu (motion blur activé requis).
-- **FSR 3.1** (FidelityFX SDK v1.1.4, backend **Vulkan**) appelé via l'interop de DXVK, juste avant la
-  préparation DoF/bloom (CS `0xB2A276FD`), sur la couleur HDR de la scène.
-- **Shaders sensibles au jitter** : patch du bytecode DXBC à la création (éclairage différé) pour que la
-  reconstruction de position reste cohérente avec la profondeur jitterée.
-- Onglet **AK-FSR** dans l'overlay ReShade : mode, options, diagnostics (passes détectées, temps CPU/GPU,
-  capture de frame). Réglages sauvegardés dans `ReShade.ini`, section `[AK-FSR]`.
+- **FSR 4.1.2** temporal AA in place of the game's SMAA, before post-processing (bloom, depth of field, UI stay
+  sharp and untouched).
+- **FSR 4 model selector**: Auto, **FP8** (RDNA 4), **INT8** (RDNA 3), **INT8-2** (RDNA 2) or **Lite**
+  (handheld model). Any model can be forced on any supported AMD GPU, to compare quality and cost.
+- **Driver watermark** toggle: AMD's own overlay shows which FSR 4 provider is really running
+  (`FSR4`, `FSR4-i8`, `FSR4-i8-2`, `FSR4L-i8`).
+- **Jitter-aware game shaders**: about 2,100 of the game's shaders (decals, light volumes, ambient occlusion,
+  deferred lighting) rebuild 3D positions from the screen without accounting for the camera jitter TAA needs,
+  which makes textures and lights shimmer. They are rewritten in memory when the game creates them. Game files
+  are not modified.
+- Rain splashes drawn after FSR so they stay crisp; texture LOD bias adjusted for TAA.
 
-## Configuration requise
+## Platform support
 
-- Batman: Arkham Knight (Steam), Proton avec DXVK récent (testé : 3.0.2 sur Deck, 3.1.1 sur PC).
-- [ReShade](https://reshade.me) 6.7.3+ **avec support des addons**, installé en `dxgi.dll` dans `Binaries/Win64`.
-- Option : [RenoDX](https://github.com/clshortfuse/renodx) `renodx-batmanak` pour le HDR (compatible).
-- Motion blur **activé** dans les options du jeu ; AA du jeu désactivé.
+| Platform | Status |
+|---|---|
+| Linux, AMD RDNA 4 (RX 9000), Proton | **tested** (RX 9070 XT, all four models) |
+| Linux, AMD RDNA 2 / 3, Proton | should work (INT8 / INT8-2), not tested |
+| Steam Deck (SteamOS) | earlier build tested with INT8; Lite model to be tested |
+| Windows | **not supported** |
+| NVIDIA / Intel | **not supported** |
+
+## Requirements
+
+- Batman: Arkham Knight (Steam, 1.6.2.0), Proton with a recent DXVK.
+- [ReShade](https://reshade.me) 6.7.3+ **with add-on support**, installed as `dxgi.dll` in `Binaries/Win64`.
+- Steam launch option: `WINEDLLOVERRIDES="dxgi=n,b" %command%`.
+- In-game graphics options: **Anti-Aliasing On** (FSR 4 takes the SMAA's place) and **Motion Blur On**.
+- `amdvkffx64.dll` from AMD's Windows driver (see below): AMD's FSR 4 library, proprietary, **not included**.
+- Not compatible with **OptiScaler** (both hook FidelityFX and Vulkan: crashes). Remove it.
+- Optional: [RenoDX](https://github.com/clshortfuse/renodx) for HDR (compatible).
 
 ## Installation
 
-1. Copier `ak-fsr.addon64` et `amd_fidelityfx_vk.dll` dans `Batman Arkham Knight/Binaries/Win64/`.
-2. Dans `ReShade.ini`, utiliser un chemin relatif : `AddonPath=.\` (un chemin absolu diffère entre PC et Deck).
-3. Ligne de lancement Steam (exemple, avec HDR) :
-   ```
-   PROTON_ENABLE_HDR=1 DXVK_HDR=1 ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 WINEDLLOVERRIDES="dxgi=n,b" %command%
-   ```
-4. En jeu, ouvrir l'overlay ReShade → onglet **AK-FSR** (mode FSR actif par défaut).
-5. Désactiver les effets d'AA de ReShade (SMAA, FXAA) : ils s'appliqueraient après FSR, sur l'interface.
+1. Download the archive from [Releases](https://github.com/kvernNC/ak-fsr/releases) and copy its
+   `Binaries/Win64/` content into the game's `Binaries/Win64/`.
+2. Get `amdvkffx64.dll`: download AMD's Windows driver package (*Adrenalin 26.10.1*), open the installer with
+   7-Zip (no installation needed), find `amdvkffx64.dll` and put it in `Binaries/Win64/ak-fsr4-linux-amd/`.
+3. RDNA 4 (RX 9000) only, for the FP8 model: add `radv_cooperative_matrix2_nv=true` at the start of the
+   launch options.
+4. In `ReShade.ini` (same folder), set `AddonPath=.\` under `[ADDON]`.
+5. Start the game, open the ReShade overlay → **AK-FSR4-Linux-AMD** tab: **Off / FSR 4**, model, watermark.
+6. Turn off ReShade's own AA effects (SMAA, FXAA): they would apply on top of FSR and the UI.
 
-### Onglet AK-FSR
+Settings are saved in `ReShade.ini`, section `[AK-FSR]`.
 
-Version publiée (branche `main`) : un seul choix, **Off / FSR 3.1 / FSR 4**, et le modèle FSR 4 utilisé (choisi
-par le pilote selon le GPU). Le reste suit les réglages validés en jeu : SMAA du jeu remplacé par FSR quand l'AA
-du jeu est actif (sinon insertion habituelle), biais de LOD -1, FSR 4 proposé dès que les DLL AMD sont en place.
-Les clés de `ReShade.ini` ci-dessous restent lues pour qui veut s'en écarter.
+## How it works
 
-### Options (clés de `[AK-FSR]`, toutes visibles dans l'onglet de la version de développement)
+- **Jitter**: `FPerspectiveMatrix` (Unreal Engine 3) is hooked in `BatmanAK.exe` (found by byte pattern) and a
+  Halton sub-pixel offset is applied to the main view only.
+- **Motion vectors**: camera motion by depth reprojection (matrices from the game's view constant buffer),
+  moving objects from the game's G-buffer velocity (hence motion blur On).
+- **FSR 4**: dispatched through DXVK's D3D11 → Vulkan interop on the scene's HDR colour, where the game's SMAA
+  would run. FSR 4.1.2 comes from AMD's driver provider (`amdvkffx64.dll`), loaded next to AMD's signed
+  FidelityFX SDK 2.3 DLLs (MIT, included).
+- **Model selection**: the driver picks its model from the GPU family it reads. The add-on presents it a GPU of
+  the chosen generation (Vulkan properties, hidden FP8 / cooperative-matrix features, and the GPU family from
+  `D3DKMTQueryAdapterInfo`), for the driver library only: the game, DXVK and ReShade see the real GPU.
+- **Shader rewriting**: DXBC bytecode of jitter-sensitive game shaders is patched at creation so position
+  reconstruction matches the jittered depth.
 
-Détails et procédure de test : [TESTING.md](TESTING.md).
+Design notes, game passes and pitfalls: [PLAN.md](PLAN.md). Test log: [PROGRESS.md](PROGRESS.md).
 
-| Option | Clé | État (PC, 27/10/2026) |
-|---|---|---|
-| Touche on/off | `ToggleKey` | validée |
-| Hautes lumières hors FSR | `Highlights` | validée (fonctionnement) |
-| FSR à la place du SMAA du jeu (AA du jeu sur « On ») | `SmaaInsertion=1` | validée, coût du SMAA récupéré |
-| Backend FSR 3 DX11 natif (`ak-fsr-dx11.dll` à copier) | `Backend=1` | validée, moins coûteux que Vulkan |
-| Vecteurs de mouvement du jeu | `GameMotionVectors=1` | fonctionne ; reprojection conservée par défaut |
-| Biais de LOD des textures | `LodBias` | **-1.0 recommandé** avec FSR (netteté +3,5 %, sans scintillement ajouté) ; pris en compte au lancement |
-| Exposition du jeu | `GameExposure=1` | fonctionne ; intérêt qualité à juger |
-| FSR 4 par le provider du pilote AMD | `Fsr4Driver=1` + menu « Version FSR » | validée (FP8, RX 9070 XT) |
+## Building (from Linux)
 
-Réglages conseillés sur PC (défauts de la version publiée) : `SmaaInsertion=1` (AA du jeu sur « On »),
-`LodBias=-1.0`, et FSR 4 si le GPU le permet (voir ci-dessous). Le Deck n'a pas encore été testé avec ces options.
-
-Version de développement seulement : pilotage sans clavier par `ak-fsr-command.txt` à côté de l'addon (`report`,
-`profile <n>`, `toggle`, `screenshot <nom> [n]`, `look`, `capture`…), rapport, profils de test, explorateur de
-shaders, compteurs ; voir TESTING.md.
-
-### OptiScaler : à éviter
-
-OptiScaler intercepte FidelityFX et Vulkan dans le processus : avec AK-FSR, plantages constatés (double free
-dans le pilote) et blocages au démarrage. Utiliser ReShade seul en `dxgi.dll`.
-
-### FSR 4 (optionnel, GPU AMD récents)
-
-FSR 4.1.2 est obtenu directement du provider du pilote AMD, sans OptiScaler :
-
-1. Placer dans `Binaries/Win64/ak-fsr/` :
-   - `amdvkffx64.dll`, tirée du pilote Windows AMD Adrenalin (archive extraite avec 7-Zip, sans installer le
-     pilote) — propriétaire, jamais dans ce dépôt ;
-   - les DLL signées du FidelityFX SDK 2.3 renommées en `_vk` : `scripts/fetch_ffx_signed.sh` puis
-     `scripts/deploy.sh` s'en chargent (dépôt officiel AMD, MIT, empreintes vérifiées).
-2. RDNA 4 (modèle FP8) : ajouter `radv_cooperative_matrix2_nv=true` au début de la ligne de lancement.
-3. `Fsr4Driver=1`, relancer le jeu, puis choisir « 4.1.2 (provider pilote) » dans le menu « Version FSR ».
-   En cas d'échec, l'addon revient à FSR 3.1 avec un message dans l'onglet.
-
-Mesures sur RX 9070 XT (800×600) : FSR 4 est moins crénelé et scintille moins que FSR 3.1, pour un coût GPU de
-0,26 ms contre 0,17 ms.
-
-## Branches
-
-- `main` : version publiée, compilée sans les outils de développement (`AKFSR_DEV_TOOLS=OFF` par défaut).
-- `dev` : développement et tests, mêmes sources compilées avec les outils (`AKFSR_DEV_TOOLS=ON` par défaut).
-
-Les deux branches ne diffèrent que par cette valeur par défaut : le travail se fait sur `dev`, puis `dev` est
-fusionnée dans `main`. Chacune peut produire l'autre variante avec `-DAKFSR_DEV_TOOLS=ON|OFF`.
-
-## Compilation (depuis Linux)
-
-Compilation croisée vers Windows x64 avec `clang-cl`, `lld-link` et le SDK/CRT MSVC fournis par
-[xwin](https://github.com/Jake-Shadle/xwin) (CRT statique : aucune dépendance aux DLL VC++).
+Cross-compiled for Windows x64 with `clang-cl`, `lld-link` and the MSVC SDK/CRT from
+[xwin](https://github.com/Jake-Shadle/xwin) (static CRT: no VC++ runtime needed).
 
 ```sh
-git clone --recurse-submodules <ce dépôt>        # ou : git submodule update --init --recursive
+git clone --recurse-submodules https://github.com/kvernNC/ak-fsr
 xwin --accept-license --cache-dir ~/.xwin-cache splat --output ~/.xwin
-scripts/fetch_ffx.sh                              # amd_fidelityfx_vk.dll (SDK v1.1.4, empreinte vérifiée)
-scripts/fetch_ffx_dx11.sh                         # facultatif : backend DX11 (M8.2) -> ak-fsr-dx11.dll
-scripts/fetch_ffx_signed.sh                       # facultatif : DLL signées du SDK 2.3 pour FSR 4 (M10)
+scripts/fetch_ffx_signed.sh      # AMD's signed FidelityFX SDK 2.3 DLLs (official repo, hashes checked)
 cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/clang-cl-xwin.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-scripts/deploy.sh                                 # copie vers le dossier du jeu (AK_GAME_DIR pour le changer)
+scripts/deploy.sh                # copies into the game folder (set AK_GAME_DIR to change it)
+scripts/package_release.sh       # release archive, never contains AMD's proprietary DLL
 ```
 
-Seul le sous-module `deps/imgui` de ReShade est nécessaire. Les shaders Vulkan (`shaders/*.comp`) sont
-précompilés dans `src/shaders/` ; `scripts/build_shaders.sh` les régénère (glslang requis).
+Branches: `main` is the release build; `dev` builds the same sources with development tools
+(`-DAKFSR_DEV_TOOLS=ON`: test profiles, remote commands, screenshots, frame capture, see [TESTING.md](TESTING.md)).
 
-## État et limites
+## Known limitations
 
-| Jalon | État |
-|---|---|
-| M0–M3 : addon, cartographie des passes, interop Vulkan, FSR sans jitter | fait (PC + Deck) |
-| M4 : jitter | fait (PC) |
-| M5 : vélocité des objets | fait (PC) |
-| M6 : shaders sensibles au jitter | éclairage différé corrigé ; AO, réflexions, décalques à voir |
-| M7 : finitions | touche on/off et hautes lumières faites ; pluie après l'AA : passes non identifiées |
-| M8 : optimisations (insertion au SMAA, backend DX11, vecteurs du jeu, biais de LOD, exposition) | faites (PC), Deck à tester |
-| M10 : FSR 4 par le provider du pilote AMD, sans OptiScaler | fait (PC, FP8), Deck à tester |
+- The game's `ScreenPercentage` setting breaks the image (game bug); this add-on does not upscale.
+- Falling rain streaks go through FSR and can look slightly softer.
+- Sub-pixel details can still flicker a little in motion.
 
-- Coût sur Steam Deck mesuré avant M8 : environ 3,4 ms par frame (FSR 3.1 en 800p, chemin Vulkan), au-delà du
-  budget visé de 2 ms ; M8.1 (SMAA récupéré) et M8.2 (DX11) doivent le réduire.
-- Les détails plus fins qu'un pixel peuvent encore sautiller en mouvement (moins avec FSR 4).
-- Journal des tests et blocages : [PROGRESS.md](PROGRESS.md) ; procédure de test sur Steam Deck : [DECK.md](DECK.md) ; page de publication : [NEXUS.md](NEXUS.md)
-  (archive : `scripts/package_release.sh`, sans aucune DLL propriétaire d'AMD).
-- Le détail de la conception, des passes du jeu et des pièges rencontrés est dans [PLAN.md](PLAN.md).
+## Credits and licences
 
-## Crédits et licences
-
-- Code de l'addon : licence [MIT](LICENSE).
-- [ReShade](https://github.com/crosire/reshade) (crosire) — API d'addon, BSD-3-Clause.
-- [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (AMD) — FSR, MIT.
-- [DXVK](https://github.com/doitsujin/dxvk) — interfaces d'interop Vulkan, zlib.
-- [Luma Framework](https://github.com/Filoppi/Luma-Framework) (Filippo Tarpini et contributeurs, MIT) —
-  idées du §4.2 de PLAN.md (insertion au SMAA, vecteurs du jeu, biais de LOD, backend DX11) et bibliothèques
-  FidelityFX DX11 précompilées (© AMD, MIT) utilisées par `ak-fsr-dx11.dll` (`scripts/fetch_ffx_dx11.sh`).
-- [OptiScaler](https://github.com/optiscaler/OptiScaler) (GPL-3.0) et
-  [FSR4-Vulkan-Bridge](https://github.com/SemiRealProductions/FSR4-Vulkan-Bridge) — sources des faits
-  d'interface du provider FSR 4 du pilote AMD ; aucun code repris.
-- [RenoDX](https://github.com/clshortfuse/renodx) — référence pour les hashes de shaders et l'organisation
-  d'un addon de remplacement, MIT.
-- Méthode inspirée du mod « Native DLSS Anti Aliasing for Arkham Knight » (Zorkanne33) ; aucun code ni
-  binaire de ce mod n'est repris ou distribué.
+- Add-on code: [MIT](LICENSE).
+- [ReShade](https://github.com/crosire/reshade) (crosire): add-on API, BSD-3-Clause.
+- [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (AMD): FSR, MIT.
+- [DXVK](https://github.com/doitsujin/dxvk): Vulkan interop interfaces, zlib.
+- [Luma Framework](https://github.com/Filoppi/Luma-Framework) (Filippo Tarpini and contributors, MIT): ideas
+  (SMAA replacement, LOD bias).
+- [OptiScaler](https://github.com/optiscaler/OptiScaler) and
+  [FSR4-Vulkan-Bridge](https://github.com/SemiRealProductions/FSR4-Vulkan-Bridge): interface facts about AMD's
+  FSR 4 driver provider; no code taken.
+- [RenoDX](https://github.com/clshortfuse/renodx): reference for shader hashes and add-on layout, MIT.
+- Method inspired by the "Native DLSS Anti Aliasing for Arkham Knight" mod (Zorkanne33); no code or files from
+  it are used or distributed.
+- Single-player game, no anti-cheat; still a mod that hooks the renderer: use at your own risk.
