@@ -10,6 +10,7 @@
 #include "jitter.hpp"
 #include "lod_bias.hpp"
 #include "passes.hpp"
+#include "perf.hpp"
 #include "vk_bridge.hpp"
 
 using namespace reshade::api;
@@ -28,6 +29,7 @@ void on_destroy_device(device *) {
   highlights::shutdown();
   rain::shutdown();
   exposure::shutdown();
+  perf::release_device_objects();
   vk::shutdown();
 }
 
@@ -137,6 +139,9 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     const fsr::settings s = get_fsr_settings();
     auto *native = reinterpret_cast<ID3D11Device *>(dev->get_native());
     auto *imm = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
+    // M13 : bloc AK-FSR complet (exposition, hautes lumières, FSR, pluie) mesuré côté D3D11.
+    perf::note_insertion(in.output != nullptr);
+    perf::d3d_mark(imm, perf::mark::block_start);
     if (s.game_exposure)
       in.exposure = exposure::prepare(native, imm,
                                       reinterpret_cast<ID3D11Resource *>(passes::get_report().exposure.handle),
@@ -159,6 +164,7 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
       rain::composite(native, imm, target, jx * static_cast<float>(desc.Width) * 0.5f,
                       -jy * static_cast<float>(desc.Height) * 0.5f);
     }
+    perf::d3d_mark(imm, perf::mark::block_end);
     return ok;
   }
 

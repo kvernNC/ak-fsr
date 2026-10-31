@@ -32,6 +32,7 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M9 : upscaling (rendu < natif) | `ScreenPercentage` du jeu cassé sur PC (testé) : voie simple fermée | — |
 | M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | M10.2–M10.3 fonctionnent (FP8) | fonctionne : INT8, 47 fps |
 | M11 : FSR 4 Lite par la DLL DX12 | à faire | à faire |
+| M13 : performances sur Deck | — | §1 mesures codé (`[Debug] FrameLog`, `PerfOverlay`), à relever ; O1–O6 après validation |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
 budget visé de 2 ms. Détail du coût (préparation / FSR / copies / flush DXVK) : à relever sur Deck.
@@ -199,6 +200,16 @@ Ne pas passer au suivant sans validation.
   textures et barrières partagées avec DXVK) ; (2) notre propre `amdxc64.dll`, écrit d'après les faits
   d'interface ; (3) FSR 4 par `amdxcffx64.dll` sur ce device. Critère : Lite relevé sur le Deck, coût ≤ FSR 4 INT8
   actuel, aucun plantage. Lourd et incertain (pont DX11↔DX12 jugé instable sous Proton).
+
+- **M13 — Performances sur le Deck** (document de travail `M13-DECK-PERF.md`, hors dépôt). Point de départ au
+  benchmark intégré (Deck OLED, 1280×800, AA natif) : 59 fps sans mod, 43 fps avec FSR 4 Lite (+6,3 ms, dont ≈ 3 ms
+  hors modèle), minimum 38 → 21 fps. Objectifs : surcoût hors modèle ≤ 1 ms, moyenne ≥ 47 fps, minimum nettement relevé.
+  1. **§1 Mesures** (codé, `src/perf.cpp`) : timestamps GPU par passe (D3D11 + Vulkan, bulles déduites), attentes CPU
+     de l'interop, événements rares, CSV par frame, moyennes 60 frames à l'écran et dans le log ; procédure et
+     capture RGP dans `DECK.md`, résumé par `scripts/frames_summary.py`. **Livrable : tableau sur 2 passages du
+     benchmark, à faire valider avant toute optimisation.**
+  2. O1 zéro attente CPU dans l'interop ; O2 suppression des copies ; O3 passes FSR inutiles ; O4 passe MV ;
+     O5 à-coups ; O6 SMAA du jeu (test utilisateur). Une optimisation par commit, mesurée après chacune.
 
 ## 8. FSR 4 (notes)
 

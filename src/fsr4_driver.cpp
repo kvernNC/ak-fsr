@@ -1,4 +1,5 @@
 #include "fsr4_driver.hpp"
+#include "perf.hpp"
 
 #include <windows.h>
 
@@ -163,7 +164,10 @@ VKAPI_ATTR VkResult VKAPI_CALL hooked_create_shader_module(VkDevice device, cons
                                                            VkShaderModule *module) {
   VkShaderModuleCreateInfo copy;
   std::vector<uint32_t> storage;
-  return g_create_shader_module(device, patch_module(info, copy, storage), allocator, module);
+  const double t0 = perf::now_ms();
+  const VkResult r = g_create_shader_module(device, patch_module(info, copy, storage), allocator, module);
+  perf::add_creation(perf::creation::amd_shader, perf::now_ms() - t0);
+  return r;
 }
 
 // Modules passés directement dans la chaîne d'un étage de pipeline (VK_KHR_maintenance5).
@@ -180,7 +184,86 @@ VKAPI_ATTR VkResult VKAPI_CALL hooked_create_compute_pipelines(VkDevice device, 
         chained->sType == VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
       local[i].stage.pNext = patch_module(chained, copies[i], storage[i]);
   }
-  return g_create_compute_pipelines(device, cache, count, local.data(), allocator, pipelines);
+  const double t0 = perf::now_ms();
+  const VkResult r = g_create_compute_pipelines(device, cache, count, local.data(), allocator, pipelines);
+  perf::add_creation(perf::creation::amd_pipeline, perf::now_ms() - t0);
+  return r;
+}
+
+// M13 §1.2-1.3 : appels de la DLL AMD mesurés (attentes CPU, soumissions, allocations, pipelines graphiques). Les
+// pointeurs ne sont donnés qu'au pilote : le filtre par module appelant est implicite.
+PFN_vkWaitForFences g_wait_for_fences = nullptr;
+PFN_vkQueueWaitIdle g_queue_wait_idle = nullptr;
+PFN_vkDeviceWaitIdle g_device_wait_idle = nullptr;
+PFN_vkQueueSubmit g_queue_submit = nullptr;
+PFN_vkQueueSubmit2 g_queue_submit2 = nullptr;
+PFN_vkAllocateMemory g_allocate_memory = nullptr;
+PFN_vkCreateGraphicsPipelines g_create_graphics_pipelines = nullptr;
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_wait_for_fences(VkDevice device, uint32_t count, const VkFence *fences,
+                                                     VkBool32 all, uint64_t timeout) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_wait_for_fences(device, count, fences, all, timeout);
+  perf::add_wait(perf::wait::driver, perf::now_ms() - t0);
+  return r;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_queue_wait_idle(VkQueue queue) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_queue_wait_idle(queue);
+  const double ms = perf::now_ms() - t0;
+  perf::add_wait(perf::wait::driver, ms);
+  perf::event("DLL AMD : vkQueueWaitIdle %.2f ms", ms);
+  return r;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_device_wait_idle(VkDevice device) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_device_wait_idle(device);
+  const double ms = perf::now_ms() - t0;
+  perf::add_wait(perf::wait::driver, ms);
+  perf::event("DLL AMD : vkDeviceWaitIdle %.2f ms", ms);
+  return r;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_queue_submit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits,
+                                                  VkFence fence) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_queue_submit(queue, count, submits, fence);
+  perf::add_creation(perf::creation::amd_submit, perf::now_ms() - t0);
+  return r;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_queue_submit2(VkQueue queue, uint32_t count, const VkSubmitInfo2 *submits,
+                                                   VkFence fence) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_queue_submit2(queue, count, submits, fence);
+  perf::add_creation(perf::creation::amd_submit, perf::now_ms() - t0);
+  return r;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
+                                                     const VkAllocationCallbacks *allocator, VkDeviceMemory *memory) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_allocate_memory(device, info, allocator, memory);
+  perf::add_creation(perf::creation::amd_alloc, perf::now_ms() - t0);
+  return r;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL timed_create_graphics_pipelines(VkDevice device, VkPipelineCache cache, uint32_t count,
+                                                               const VkGraphicsPipelineCreateInfo *infos,
+                                                               const VkAllocationCallbacks *allocator,
+                                                               VkPipeline *pipelines) {
+  const double t0 = perf::now_ms();
+  const VkResult r = g_create_graphics_pipelines(device, cache, count, infos, allocator, pipelines);
+  perf::add_creation(perf::creation::amd_pipeline, perf::now_ms() - t0);
+  return r;
+}
+
+template <typename T>
+PFN_vkVoidFunction wrap(PFN_vkVoidFunction real, T &slot, T hook) {
+  slot = reinterpret_cast<T>(real);
+  return reinterpret_cast<PFN_vkVoidFunction>(hook);
 }
 
 PFN_vkVoidFunction VKAPI_CALL driver_get_device_proc_addr(VkDevice device, const char *name) {
@@ -194,6 +277,15 @@ PFN_vkVoidFunction VKAPI_CALL driver_get_device_proc_addr(VkDevice device, const
     g_create_compute_pipelines = reinterpret_cast<PFN_vkCreateComputePipelines>(f);
     return reinterpret_cast<PFN_vkVoidFunction>(&hooked_create_compute_pipelines);
   }
+  if (std::strcmp(name, "vkWaitForFences") == 0) return wrap(f, g_wait_for_fences, &timed_wait_for_fences);
+  if (std::strcmp(name, "vkQueueWaitIdle") == 0) return wrap(f, g_queue_wait_idle, &timed_queue_wait_idle);
+  if (std::strcmp(name, "vkDeviceWaitIdle") == 0) return wrap(f, g_device_wait_idle, &timed_device_wait_idle);
+  if (std::strcmp(name, "vkQueueSubmit") == 0) return wrap(f, g_queue_submit, &timed_queue_submit);
+  if (std::strcmp(name, "vkQueueSubmit2") == 0 || std::strcmp(name, "vkQueueSubmit2KHR") == 0)
+    return wrap(f, g_queue_submit2, &timed_queue_submit2);
+  if (std::strcmp(name, "vkAllocateMemory") == 0) return wrap(f, g_allocate_memory, &timed_allocate_memory);
+  if (std::strcmp(name, "vkCreateGraphicsPipelines") == 0)
+    return wrap(f, g_create_graphics_pipelines, &timed_create_graphics_pipelines);
   return f;
 }
 

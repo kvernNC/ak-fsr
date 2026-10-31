@@ -4,6 +4,8 @@
 
 #include <cstring>
 
+#include "perf.hpp"
+
 namespace akfsr::d3d {
 namespace {
 
@@ -38,6 +40,7 @@ ID3D11ComputeShader *compile_cs(ID3D11Device *dev, const char *source, const cha
     return nullptr;
   }
   ID3DBlob *code = nullptr, *messages = nullptr;
+  const double t0 = perf::now_ms();
   const HRESULT hr = compile(source, std::strlen(source), "ak-fsr", nullptr, nullptr, entry, "cs_5_0",
                              D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &messages);
   if (FAILED(hr)) {
@@ -52,6 +55,9 @@ ID3D11ComputeShader *compile_cs(ID3D11Device *dev, const char *source, const cha
     cs = nullptr;
   }
   code->Release();
+  const double ms = perf::now_ms() - t0;
+  perf::add_creation(perf::creation::akfsr_d3d_shader, ms);
+  perf::event("compute shader D3D11 AK-FSR %s compilé : %.2f ms", entry, ms);
   return cs;
 }
 

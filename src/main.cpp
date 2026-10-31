@@ -20,6 +20,7 @@
 #include "insertion.hpp"
 #include "jitter.hpp"
 #include "passes.hpp"
+#include "perf.hpp"
 #include "vk_device_hook.hpp"
 #include "version.h"
 #if AKFSR_DEV_TOOLS
@@ -78,6 +79,7 @@ void on_init_swapchain(reshade::api::swapchain *swapchain, bool resize) {
 
 void on_reshade_present(reshade::api::effect_runtime *runtime) {
   akfsr::jitter::on_present();
+  akfsr::perf::on_present();
 #if AKFSR_DEV_TOOLS
   akfsr::dev::on_present(runtime);
 #endif
@@ -233,6 +235,7 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
       reshade::register_event<reshade::addon_event::reshade_present>(on_reshade_present);
       g_addon_dir = module_dir(module);
+      akfsr::perf::init(g_addon_dir);  // M13 : [Debug] FrameLog / PerfOverlay
 #if AKFSR_DEV_TOOLS
       akfsr::dev::init(g_addon_dir);
 #endif
@@ -248,6 +251,7 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID) {
       break;
     case DLL_PROCESS_DETACH:
       reshade::unregister_overlay("AK-FSR", on_overlay);
+      akfsr::perf::shutdown();
       akfsr::jitter::uninstall();
       akfsr::insertion::unregister_events();
       akfsr::passes::unregister_events();

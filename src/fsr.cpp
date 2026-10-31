@@ -15,6 +15,7 @@
 #include "fsr_params.hpp"
 #include "gpu_timer.hpp"
 #include "jitter.hpp"
+#include "perf.hpp"
 #include "shaders/fsr_prepare.spv.h"
 #include "vk_bridge.hpp"
 #include "vk_context.hpp"
@@ -112,6 +113,7 @@ PFN_vkVoidFunction VKAPI_CALL ffx_get_device_proc_addr(VkDevice device, const ch
 bool create_pipeline() {
   if (g.pipeline_ok) return true;
   const VkDevice dev = ctx().device;
+  const double t0 = now_ms();
 
   VkShaderModuleCreateInfo module{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
   module.codeSize = sizeof(k_fsr_prepare_spv);
@@ -160,11 +162,18 @@ bool create_pipeline() {
   alloc.pSetLayouts = &g.set_layout;
   if (!check(fn.vkAllocateDescriptorSets(dev, &alloc, &g.set), "vkAllocateDescriptorSets")) return false;
   g.pipeline_ok = true;
+  const double ms = now_ms() - t0;
+  perf::add_creation(perf::creation::akfsr_pipeline, ms);
+  perf::event("pipeline AK-FSR (vecteurs de mouvement) créé : %.2f ms", ms);
   return true;
 }
 
 void destroy_context() {
-  if (g.context != nullptr) fsr4::destroy_context(&g.context);
+  if (g.context != nullptr) {
+    const double t0 = now_ms();
+    fsr4::destroy_context(&g.context);
+    perf::event("contexte FFX détruit : %.2f ms", now_ms() - t0);
+  }
   g.context = nullptr;
 }
 
@@ -216,6 +225,9 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
     hooked = true;
     add_shutdown_hook(destroy_all);
   }
+  perf::event("ressources FSR %s : %ux%u, format DXGI %d (avant : %ux%u, format %d)",
+              g.color_in.handle != VK_NULL_HANDLE ? "recréées" : "créées", width, height, static_cast<int>(format),
+              g.width, g.height, static_cast<int>(g.format));
   if (g.color_in.handle != VK_NULL_HANDLE) wait_idle();
   destroy_frame_resources();
 
@@ -289,8 +301,12 @@ bool ensure_context(const settings &s, bool exposure) {
                                                        : "AK-FSR: création du contexte FSR 4 (auto-exposition non)");
   fsr4::set_model(static_cast<fsr4::model>(s.fsr4_model));
   fsr4::set_watermark(s.fsr4_watermark);
+  const double create_t0 = now_ms();
   const ffxReturnCode_t rc =
       fsr4::create_context(&g.context, &desc.header, ctx().device, ctx().physical, ffx_get_device_proc_addr);
+  perf::event("contexte FFX %s : %.2f ms (%ux%u, auto-exposition %s, modèle imposé %d)",
+              rc == FFX_API_RETURN_OK ? "créé" : "en échec", now_ms() - create_t0, g.width, g.height,
+              s.auto_exposure ? "oui" : "non", s.fsr4_model);
   if (rc != FFX_API_RETURN_OK) {
     g.context = nullptr;
     const auto driver = fsr4::get_info();
@@ -500,7 +516,10 @@ bool run(const frame_inputs &in, const settings &requested) {
   // M8.5 : exposition fournie -> pas d'auto-exposition (contexte recréé en conséquence).
   settings s = requested;
   if (in.exposure != nullptr) s.auto_exposure = false;
-  return run_frame(in, s);
+  const double t0 = now_ms();
+  const bool ok = run_frame(in, s);
+  perf::add_cpu_run(now_ms() - t0);
+  return ok;
 }
 
 static bool run_frame(const frame_inputs &in, const settings &s) {
@@ -539,10 +558,12 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   // 1) Entrées du jeu -> nos images partagées (copies par DXVK).
   ID3D11DeviceContext *imm = ctx().immediate;
   if (now_ms() - g_overlay_seen_ms.load(std::memory_order_relaxed) < 1000.0) g_total_timer.begin(ctx().d3d, imm);
+  perf::d3d_mark(imm, perf::mark::copy_in_start);
   imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
   imm->CopySubresourceRegion(g.depth_src.texture, 0, 0, 0, 0, in.depth, 0, nullptr);
   if (objects) imm->CopySubresourceRegion(g.velocity_src.texture, 0, 0, 0, 0, in.velocity, 0, nullptr);
   if (use_exposure) imm->CopySubresourceRegion(g.exposure.texture, 0, 0, 0, 0, in.exposure, 0, nullptr);
+  perf::d3d_mark(imm, perf::mark::copy_in_end);  // avant le flush : dans la même soumission que les copies
   if (!flush_dxvk()) {
     g_total_timer.end(imm);
     return false;
@@ -626,7 +647,9 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   }
 
   // 4) Résultat -> couleur du jeu.
+  perf::d3d_mark(imm, perf::mark::copy_out_start);
   imm->CopySubresourceRegion(in.output != nullptr ? in.output : in.color, 0, 0, 0, 0, g.color_out.texture, 0, nullptr);
+  perf::d3d_mark(imm, perf::mark::copy_out_end);
   g_total_timer.end(imm);
   {
     std::lock_guard lock(g_info_mutex);

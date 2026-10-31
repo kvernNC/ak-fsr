@@ -1,4 +1,5 @@
 #include "passes.hpp"
+#include "perf.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -302,6 +303,7 @@ bool replace_smaa(command_list *cmd, device *dev) {
     g_smaa_disarmed = true;
     reshade::log::message(reshade::log::level::warning,
                           "AK-FSR: insertion au SMAA en échec, repli sur 0xB2A276FD (option désarmée)");
+    perf::event("point d'insertion : SMAA du jeu -> 0xB2A276FD (repli)");
   }
   if (!g_current.smaa_skipped) return false;  // SMAA complet : on le laisse tourner
   if (color.handle != 0 && output.handle != 0 && color.desc.texture.format == output.desc.texture.format &&

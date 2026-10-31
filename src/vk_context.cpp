@@ -11,6 +11,7 @@
 #include <reshade.hpp>
 
 #include "dxvk_interop.hpp"
+#include "perf.hpp"
 #include "vk_bridge.hpp"
 
 namespace akfsr::vk {
@@ -26,6 +27,8 @@ struct slot {
   VkCommandBuffer cmd = VK_NULL_HANDLE;
   VkFence fence = VK_NULL_HANDLE;
   bool submitted = false;
+  bool stamps_read = true;  // timestamps relevés (lecture sans attente, M13)
+  uint64_t frame = 0;       // frame de soumission (perf::frame)
 };
 
 struct state {
@@ -135,7 +138,9 @@ int filter(EXCEPTION_POINTERS *ep) {
 
 DWORD flush(IDXGIVkInteropDevice *interop) {
   __try {
+    const double t0 = now_ms();
     interop->FlushRenderingCommands();
+    perf::add_wait(perf::wait::flush, now_ms() - t0);
     return 0;
   } __except (filter(GetExceptionInformation())) {
     return GetExceptionCode();
@@ -144,9 +149,14 @@ DWORD flush(IDXGIVkInteropDevice *interop) {
 
 DWORD submit(IDXGIVkInteropDevice *interop, VkQueue queue, const VkSubmitInfo *info, VkFence fence, VkResult *r) {
   __try {
+    const double t0 = now_ms();
     interop->LockSubmissionQueue();
+    const double t1 = now_ms();
     *r = fn.vkQueueSubmit(queue, 1, info, fence);
     interop->ReleaseSubmissionQueue();
+    const double t2 = now_ms();
+    perf::add_wait(perf::wait::lock, t1 - t0);
+    perf::add_wait(perf::wait::held, t2 - t1);
     return 0;
   } __except (filter(GetExceptionInformation())) {
     return GetExceptionCode();
@@ -166,26 +176,45 @@ bool guarded(DWORD code, const char *step) {
   return false;
 }
 
-// Attend un slot déjà soumis et relève ses timestamps.
+// Relève sans attendre les timestamps d'un slot soumis (jamais VK_QUERY_RESULT_WAIT_BIT) : true une fois relevés.
+// Le dernier point (fin du command buffer) est écrit en dernier : sa disponibilité vaut pour tout le slot.
+bool read_timestamps(uint32_t index) {
+  auto &s = g.slots[index];
+  if (s.stamps_read || g.timestamp_ms <= 0) return true;
+  // Valeur + disponibilité par point : les points non écrits par l'appelant sont ignorés.
+  uint64_t ts[kPoints][2] = {};
+  fn.vkGetQueryPoolResults(g.info.device, g.queries, index * kPoints, kPoints, sizeof(ts), ts, sizeof(ts[0]),
+                           VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+  if (!ts[kPoints - 1][1]) return false;
+  s.stamps_read = true;
+  auto span = [&](uint32_t a, uint32_t b) {
+    return ts[a][1] && ts[b][1] ? static_cast<double>(ts[b][0] - ts[a][0]) * g.timestamp_ms : 0.0;
+  };
+  double ns[kPoints];
+  bool valid[kPoints];
+  for (uint32_t i = 0; i < kPoints; ++i) {
+    ns[i] = static_cast<double>(ts[i][0]) * g.timestamp_ms * 1e6;
+    valid[i] = ts[i][1] != 0;
+  }
+  perf::set_vk_stamps(s.frame, ns, valid);
+  std::lock_guard lock(g_info_mutex);
+  g_timings.gpu_ms = span(0, 3);
+  g_timings.gpu_prepare_ms = span(0, 1);
+  g_timings.gpu_fsr_ms = span(1, 2);
+  return true;
+}
+
+// Attend un slot déjà soumis (fence de la frame N-3, normalement déjà signalée) et relève ses timestamps.
 bool reclaim(uint32_t index) {
   auto &s = g.slots[index];
   if (!s.submitted) return true;
-  if (!check(fn.vkWaitForFences(g.info.device, 1, &s.fence, VK_TRUE, 1'000'000'000ull), "vkWaitForFences"))
-    return false;
+  const double t0 = now_ms();
+  const VkResult r = fn.vkWaitForFences(g.info.device, 1, &s.fence, VK_TRUE, 1'000'000'000ull);
+  perf::add_wait(perf::wait::fence, now_ms() - t0);
+  if (!check(r, "vkWaitForFences")) return false;
   s.submitted = false;
-  if (g.timestamp_ms > 0) {
-    // Valeur + disponibilité par point : les points non écrits par l'appelant sont ignorés.
-    uint64_t ts[kPoints][2] = {};
-    fn.vkGetQueryPoolResults(g.info.device, g.queries, index * kPoints, kPoints, sizeof(ts), ts, sizeof(ts[0]),
-                             VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
-    auto span = [&](uint32_t a, uint32_t b) {
-      return ts[a][1] && ts[b][1] ? static_cast<double>(ts[b][0] - ts[a][0]) * g.timestamp_ms : 0.0;
-    };
-    std::lock_guard lock(g_info_mutex);
-    g_timings.gpu_ms = span(0, 3);
-    g_timings.gpu_prepare_ms = span(0, 1);
-    g_timings.gpu_fsr_ms = span(1, 2);
-  }
+  read_timestamps(index);
+  s.stamps_read = true;
   return true;
 }
 
@@ -353,11 +382,19 @@ void destroy_image(image &img) {
 
 void wait_idle() {
   if (g.info.interop == nullptr || g.info.device == VK_NULL_HANDLE) return;
+  const double t0 = now_ms();
   seh::flush(g.info.interop);
   g.info.interop->LockSubmissionQueue();
   fn.vkDeviceWaitIdle(g.info.device);
   g.info.interop->ReleaseSubmissionQueue();
-  for (auto &s : g.slots) s.submitted = false;
+  const double ms = now_ms() - t0;
+  perf::add_wait(perf::wait::idle, ms);
+  perf::event("vkDeviceWaitIdle (flush DXVK compris) %.2f ms", ms);
+  for (uint32_t i = 0; i < kSlots; ++i) {
+    read_timestamps(i);
+    g.slots[i].submitted = false;
+    g.slots[i].stamps_read = true;
+  }
 }
 
 bool flush_dxvk() { return g.ok && guarded(seh::flush(g.info.interop), "FlushRenderingCommands"); }
@@ -366,6 +403,8 @@ VkCommandBuffer begin_commands() {
   if (!g.ok) return VK_NULL_HANDLE;
   const uint32_t index = g.next;
   g.next = (g.next + 1) % kSlots;
+  for (uint32_t i = 0; i < kSlots; ++i)
+    if (g.slots[i].submitted) read_timestamps(i);
   if (!reclaim(index)) return VK_NULL_HANDLE;
   auto &s = g.slots[index];
   fn.vkResetFences(g.info.device, 1, &s.fence);
@@ -400,6 +439,8 @@ bool submit_commands(VkCommandBuffer cmd, double cpu_start_ms) {
   if (!guarded(seh::submit(g.info.interop, g.info.queue, &submit, s.fence, &r), "vkQueueSubmit")) return false;
   if (!check(r, "vkQueueSubmit")) return false;
   s.submitted = true;
+  s.stamps_read = g.timestamp_ms <= 0;
+  s.frame = perf::frame();
 
   std::lock_guard lock(g_info_mutex);
   g_timings.flush_cpu_ms = now_ms() - cpu_start_ms;
