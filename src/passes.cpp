@@ -51,13 +51,24 @@ struct frame_flags {
   bool insertion = false, smaa = false, velocity = false, view_cb = false, tonemap = false;
   bool fsr_done = false;      // FSR a déjà tourné cette frame (au SMAA, M8.1)
   bool smaa_skipped = false;  // passes SMAA du jeu sautées cette frame
-  bool rt4_cleared = false;   // RT4 effacée cette frame : vélocité des objets écrite (motion blur du jeu actif)
   uint64_t edge_depth = 0;    // profondeur lue par SMAAEdgeDetection (t1)
   uint32_t tonemap_hash = 0;
 } g_current;
 
 std::mutex g_report_mutex;
 frame_report g_report;
+
+// RT4 (vélocité des objets) dans la frame, contexte immédiat et contextes différés (enregistrés sur d'autres
+// threads, exécutés plus tard) : effacements et draws qui l'ont en RT0 (passe de vélocité du motion blur).
+std::atomic<uint64_t> g_rt4_handle{0};
+std::atomic<uint32_t> g_rt4_clears_imm{0}, g_rt4_clears_def{0}, g_rt4_draws_imm{0}, g_rt4_draws_def{0};
+thread_local bool t_rt0_is_rt4 = false;
+constexpr uint64_t kRt4ValidFrames = 30;  // RT4 jugée valide si effacée dans les 30 dernières frames
+uint64_t g_frame_index = 0, g_rt4_last_clear_frame = UINT64_MAX;
+
+void count_rt4_draw(bool immediate) {
+  if (t_rt0_is_rt4) (immediate ? g_rt4_draws_imm : g_rt4_draws_def).fetch_add(1, std::memory_order_relaxed);
+}
 
 // Contenu du CB View : capturé à l'unmap de ce buffer précis.
 std::atomic<uint64_t> g_view_cb_handle{0};
@@ -148,6 +159,7 @@ bool skip_smaa_draw() {
 void bind_jitter_cb(device *dev, command_list *cmd, bool pixel_shader);  // M6, voir plus bas
 
 bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance) {
+  count_rt4_draw(is_immediate(cmd));
   if (!is_immediate(cmd)) {
     explorer::on_deferred_draw();
     return false;
@@ -165,6 +177,7 @@ bool on_indirect(command_list *cmd, indirect_command type, resource, uint64_t, u
 
 bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, uint32_t first_index,
                      int32_t vertex_offset, uint32_t first_instance) {
+  count_rt4_draw(is_immediate(cmd));
   if (!is_immediate(cmd)) {
     explorer::on_deferred_draw();
     return false;
@@ -259,7 +272,10 @@ uint64_t previous_velocity() {
   // Seulement si la passe de vélocité a tourné à la frame précédente : après une vidéo ou un chargement,
   // la texture a pu être détruite (pointeur pendant -> crash au retour en jeu).
   if (!g_report.velocity.found || g_report.velocity_objects.handle == 0) return 0;
-  const bool valid = g_current.rt4_cleared;
+  const bool cleared_now = g_rt4_clears_imm.load() + g_rt4_clears_def.load() != 0;
+  if (cleared_now) g_rt4_last_clear_frame = g_frame_index;
+  // Le jeu saute parfois l'effacement quelques frames en mouvement (motion blur actif) : tolérance de 30 frames.
+  const bool valid = g_rt4_last_clear_frame != UINT64_MAX && g_frame_index - g_rt4_last_clear_frame < kRt4ValidFrames;
   g_report.velocity_rt4_valid = valid;
   if (valid != g_rt4_valid_logged) {
     g_rt4_valid_logged = valid;
@@ -401,6 +417,7 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
     g_report.depth = depth;
     g_report.velocity_objects = objects;
     g_report.velocity_combined = combined;
+    g_rt4_handle.store(objects.handle, std::memory_order_relaxed);
   } else if (std::find(kTonemapCs.begin(), kTonemapCs.end(), g_cs.hash) != kTonemapCs.end()) {
     g_current.tonemap = true;
     g_current.tonemap_hash = g_cs.hash;
@@ -438,11 +455,12 @@ bool on_update_buffer(device *, const void *data, resource dst, uint64_t offset,
 
 // M8.3 : Luma repère la vélocité du jeu comme la cible R16G16_FLOAT effacée ; on la compare à RT4.
 bool on_clear_rtv(command_list *cmd, resource_view rtv, const float[4], uint32_t, const rect *) {
-  if (!is_immediate(cmd)) return false;
   const auto res = resolve_view(cmd->get_device(), rtv.handle);
   if (res.desc.type != resource_type::texture_2d || res.desc.texture.format != format::r16g16_float) return false;
+  if (res.handle != 0 && res.handle == g_rt4_handle.load(std::memory_order_relaxed))
+    (is_immediate(cmd) ? g_rt4_clears_imm : g_rt4_clears_def).fetch_add(1, std::memory_order_relaxed);
+  if (!is_immediate(cmd)) return false;
   std::lock_guard lock(g_report_mutex);
-  if (res.handle == g_report.velocity_objects.handle) g_current.rt4_cleared = true;
   if (g_report.cleared_rg16.handle == res.handle) return false;
   g_report.cleared_rg16 = res;
   char buf[160];
@@ -453,6 +471,12 @@ bool on_clear_rtv(command_list *cmd, resource_view rtv, const float[4], uint32_t
   return false;
 }
 
+void on_bind_render_targets(command_list *cmd, uint32_t count, const resource_view *rtvs, resource_view) {
+  const uint64_t rt4 = g_rt4_handle.load(std::memory_order_relaxed);
+  t_rt0_is_rt4 = rt4 != 0 && count != 0 && rtvs[0].handle != 0 &&
+                 cmd->get_device()->get_resource_from_view(rtvs[0]).handle == rt4;
+}
+
 // Oublie immédiatement les ressources repérées qui sont libérées par le jeu.
 void on_destroy_resource(device *, resource res) {
   std::lock_guard lock(g_report_mutex);
@@ -460,6 +484,7 @@ void on_destroy_resource(device *, resource res) {
                   &g_report.insertion_depth, &g_report.cleared_rg16, &g_report.exposure}) {
     if (r->handle == res.handle) *r = {};
   }
+  if (g_rt4_handle.load() == res.handle) g_rt4_handle = 0;
 }
 
 void on_present(command_queue *queue, swapchain *, const rect *, const rect *, uint32_t, const rect *) {
@@ -489,6 +514,9 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
     std::copy_n(g_view_head.begin(), g_report.view_cb_head.size(), g_report.view_cb_head.begin());
     g_report.view_cb_valid = g_view_valid;
   }
+  perf::note_rt4(g_rt4_clears_imm.exchange(0), g_rt4_clears_def.exchange(0), g_rt4_draws_imm.exchange(0),
+                 g_rt4_draws_def.exchange(0), g_report.velocity_rt4_valid);
+  ++g_frame_index;
   g_current = {};
 }
 
@@ -518,6 +546,7 @@ void register_events() {
   reshade::register_event<reshade::addon_event::present>(on_present);
   reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
   reshade::register_event<reshade::addon_event::clear_render_target_view>(on_clear_rtv);
+  reshade::register_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets);
 }
 
 void unregister_events() {
@@ -537,6 +566,7 @@ void unregister_events() {
   reshade::unregister_event<reshade::addon_event::present>(on_present);
   reshade::unregister_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
   reshade::unregister_event<reshade::addon_event::clear_render_target_view>(on_clear_rtv);
+  reshade::unregister_event<reshade::addon_event::bind_render_targets_and_depth_stencil>(on_bind_render_targets);
 }
 
 }  // namespace akfsr::passes

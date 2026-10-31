@@ -51,6 +51,7 @@ struct row {
   uint32_t creations[kCreations] = {};
   double creation_ms[kCreations] = {};
   std::string events;
+  char rt4[48] = {};
 };
 
 // Grandeurs dérivées d'une ligne close (ms, NaN si absente).
@@ -234,6 +235,8 @@ void write_csv(const row &r, const derived &d, const std::string &created) {
   for (double w : d.waits) csv_value(line, w);
   for (int m : {m_gpu_total, m_pre, m_copy_in, m_gap_in, m_mv, m_fsr, m_vk_end, m_gap_out, m_copy_out, m_post})
     csv_value(line, d.m[m]);
+  line += ',';
+  line += r.rt4;
   line += ',' + created + ",\"";
   for (char c : r.events) line += c == '"' ? '\'' : c;
   line += "\"\n";
@@ -355,7 +358,7 @@ void init(const std::filesystem::path &addon_dir) {
       std::setvbuf(g_csv, nullptr, _IOFBF, 1 << 16);
       std::fputs("frame,time_s,cpu_frame_ms,insertion,cpu_akfsr_ms,wait_flush_ms,wait_lock_ms,lock_held_ms,"
                  "wait_fence_ms,wait_idle_ms,wait_driver_ms,gpu_total_ms,gpu_pre_ms,gpu_copy_in_ms,gpu_gap_in_ms,"
-                 "gpu_mv_ms,gpu_fsr_ms,gpu_vk_end_ms,gpu_gap_out_ms,gpu_copy_out_ms,gpu_post_ms,creations,events\n",
+                 "gpu_mv_ms,gpu_fsr_ms,gpu_vk_end_ms,gpu_gap_out_ms,gpu_copy_out_ms,gpu_post_ms,rt4,creations,events\n",
                  g_csv);
     } else {
       log_line(reshade::log::level::error, "mesures : impossible d'ouvrir ak-fsr-frames.csv");
@@ -478,6 +481,15 @@ void set_vk_stamps(uint64_t f, const double ns[4], const bool valid[4]) {
       r->vk[i] = ns[i];
       r->vk_mask |= 1u << i;
     }
+}
+
+void note_rt4(uint32_t clears_imm, uint32_t clears_def, uint32_t draws_imm, uint32_t draws_def, bool used) {
+  if (!enabled()) return;
+  std::lock_guard lock(g_mutex);
+  // Format : c<effacements imm>/<diff> d<draws imm>/<diff> u|i (utilisée / ignorée).
+  if (row *r = find_row(frame()))
+    std::snprintf(r->rt4, sizeof(r->rt4), "c%u/%u d%u/%u %c", clears_imm, clears_def, draws_imm, draws_def,
+                  used ? 'u' : 'i');
 }
 
 void add_creation(creation c, double ms) {

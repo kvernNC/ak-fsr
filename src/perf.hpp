@@ -51,6 +51,10 @@ void set_vk_stamps(uint64_t frame, const double ns[4], const bool valid[4]);
 enum class creation : int { amd_shader, amd_pipeline, amd_alloc, amd_submit, akfsr_pipeline, akfsr_d3d_shader, count };
 void add_creation(creation c, double ms);
 
+// RT4 (vélocité des objets) dans la frame : effacements et draws de la passe de vélocité, contexte immédiat /
+// contextes différés, et décision d'AK-FSR (colonne `rt4` du CSV).
+void note_rt4(uint32_t clears_imm, uint32_t clears_def, uint32_t draws_imm, uint32_t draws_def, bool used);
+
 // Événement rare : horodaté dans le log et dans la colonne `events` du CSV.
 void event(const char *fmt, ...);
 
