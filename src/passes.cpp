@@ -51,6 +51,7 @@ struct frame_flags {
   bool insertion = false, smaa = false, velocity = false, view_cb = false, tonemap = false;
   bool fsr_done = false;      // FSR a déjà tourné cette frame (au SMAA, M8.1)
   bool smaa_skipped = false;  // passes SMAA du jeu sautées cette frame
+  bool rt4_cleared = false;   // RT4 effacée cette frame : vélocité des objets écrite (motion blur du jeu actif)
   uint64_t edge_depth = 0;    // profondeur lue par SMAAEdgeDetection (t1)
   uint32_t tonemap_hash = 0;
 } g_current;
@@ -248,11 +249,27 @@ void bind_jitter_cb(device *dev, command_list *cmd, bool pixel_shader) {
     ctx->CSSetConstantBuffers(shader_patch::kJitterCbSlot, 1, &g_jitter_cb);
 }
 
+// Vélocité des objets valide cette frame : le jeu n'efface et ne remplit RT4 (passe dédiée) que si son motion blur
+// est actif. Sinon RT4 garde d'anciennes valeurs et FSR rejette son historique partout (jitter visible) : on passe
+// alors à la seule reprojection de la caméra. Constaté sur captures, motion blur On / Off.
+bool g_rt4_valid_logged = true;
+
 uint64_t previous_velocity() {
   std::lock_guard lock(g_report_mutex);
   // Seulement si la passe de vélocité a tourné à la frame précédente : après une vidéo ou un chargement,
   // la texture a pu être détruite (pointeur pendant -> crash au retour en jeu).
-  return g_report.velocity.found ? g_report.velocity_objects.handle : 0;
+  if (!g_report.velocity.found || g_report.velocity_objects.handle == 0) return 0;
+  const bool valid = g_current.rt4_cleared;
+  g_report.velocity_rt4_valid = valid;
+  if (valid != g_rt4_valid_logged) {
+    g_rt4_valid_logged = valid;
+    reshade::log::message(reshade::log::level::info,
+                          valid ? "AK-FSR: vélocité des objets : RT4 effacée par le jeu (motion blur actif), utilisée"
+                                : "AK-FSR: vélocité des objets : RT4 non effacée (motion blur du jeu coupé ?), "
+                                  "reprojection de la caméra seule");
+    perf::event(valid ? "vélocité des objets : RT4 valide" : "vélocité des objets : RT4 non effacée, ignorée");
+  }
+  return valid ? g_report.velocity_objects.handle : 0;
 }
 
 // M8.1 : FSR à la place de SMAANeighborhoodBlending (t0 couleur linéaire -> u0). true : dispatch sauté.
@@ -425,6 +442,7 @@ bool on_clear_rtv(command_list *cmd, resource_view rtv, const float[4], uint32_t
   const auto res = resolve_view(cmd->get_device(), rtv.handle);
   if (res.desc.type != resource_type::texture_2d || res.desc.texture.format != format::r16g16_float) return false;
   std::lock_guard lock(g_report_mutex);
+  if (res.handle == g_report.velocity_objects.handle) g_current.rt4_cleared = true;
   if (g_report.cleared_rg16.handle == res.handle) return false;
   g_report.cleared_rg16 = res;
   char buf[160];

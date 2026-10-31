@@ -44,6 +44,8 @@ struct frame_report {
   uint64_t smaa_fsr_frames = 0;  // frames où FSR a remplacé le SMAA
   // M8.3 : dernière cible R16G16_FLOAT effacée (clear_render_target_view), méthode de Luma.
   found_resource cleared_rg16;
+  // RT4 effacée par le jeu dans la frame (motion blur actif) : vélocité des objets utilisée ; sinon caméra seule.
+  bool velocity_rt4_valid = false;
   // M8.5 : texture 1×1 lue par le tonemapper (exposition du jeu), et son slot.
   found_resource exposure;
   int exposure_slot = -1;

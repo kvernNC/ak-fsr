@@ -318,6 +318,11 @@ Ce sont des **faits d'interopérabilité** ; l'implémentation d'AK-FSR doit êt
   est activé, d'où son absence sur le Deck où il était désactivé. Point d'insertion toujours présent :
   CS `0xB2A276FD` (t0 profondeur, t1 couleur HDR).
 
+- **Motion blur du jeu coupé** : le jeu n'efface plus RT4 (vélocité des objets) et ne lance plus la passe qui la
+  remplit ; RT4 garde de vieilles valeurs, FSR rejette son historique partout et le jitter devient visible (aliasing
+  « pire que sans AA »). AK-FSR n'utilise RT4 que si elle a été effacée pendant la frame, sinon reprojection de la
+  caméra seule (constaté le 01/11/2026 sur Deck, captures motion blur On / Off).
+
 ## 11. Cadre et crédits
 
 Projet personnel. On étudie et réimplémente des **méthodes** (passes, buffers, logique) :

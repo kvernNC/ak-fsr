@@ -168,6 +168,7 @@ std::string build_report() {
   add("[M8.5] exposition : slot t%d, GameExposure=%d mode %d échelle %.2f : %s", r.exposure_slot,
       st.game_exposure ? 1 : 0, st.exposure_mode, st.exposure_scale,
       st.game_exposure ? akfsr::exposure::status().c_str() : "option coupée");
+  add("[ressource] RT4 valide (effacée dans la frame, motion blur du jeu) : %s", r.velocity_rt4_valid ? "oui" : "non");
   add("[ressource] R16G16F effacée == RT4 : %s", r.cleared_rg16.handle != 0 && r.cleared_rg16.handle == r.velocity_objects.handle ? "oui" : "non");
   const char *smaa[] = {"option coupée", "FSR remplace le SMAA", "repli 0xB2A276FD", "désarmée"};
   add("[M8.1] insertion au SMAA : %s, %llu frames", smaa[static_cast<int>(r.smaa_insertion)],
@@ -511,6 +512,8 @@ void draw_passes() {
   pass_row("Vélocité (motion blur)", r.velocity);
   resource_row("profondeur (t0)", r.depth);
   resource_row("vélocité objets (t1)", r.velocity_objects);
+  ImGui::SameLine();
+  ImGui::TextUnformatted(r.velocity_rt4_valid ? "valide (motion blur du jeu)" : "ignorée (RT4 non effacée)");
   resource_row("vélocité combinée (u0)", r.velocity_combined);
   resource_row("R16G16F effacée (M8.3)", r.cleared_rg16);
   resource_row("exposition 1x1 (M8.5)", r.exposure);
