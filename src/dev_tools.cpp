@@ -26,6 +26,7 @@
 #include "passes.hpp"
 #include "screenshot.hpp"
 #include "shader_explorer.hpp"
+#include "ue3_exec.hpp"
 #include "vk_bridge.hpp"
 #include "vk_device_hook.hpp"
 #include "version.h"
@@ -234,6 +235,8 @@ void next_test_profile() {
 //   jitter 0|1, patches 0|1, objects 0|1  jitter, shaders corrigés (M6), vélocité des objets (M5)
 //   look <dx> <dy> <frames>  déplace la souris de (dx, dy) à chaque frame pendant <frames> frames (caméra)
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
+//   ue3 <commande>    commande du moteur exécutée sur le thread de jeu (ex. ue3 scale set ScreenPercentage 67,
+//                     ue3 scale dump) ; réponses du moteur dans ReShade.log (« [ue3] moteur : … »)
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
 //                         (<nom>_0.png …, n ≤ 16) pour juger le scintillement
 int g_shader_dump_in = 0;  // frames avant l'écriture de ak-fsr-shaders.txt (0 : rien)
@@ -297,7 +300,9 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     cmd = line.substr(0, sp);
     arg = line.substr(sp + 1);
   }
-  if (cmd == "report") {
+  if (cmd == "ue3") {
+    akfsr::ue3::post(static_cast<HWND>(runtime->get_hwnd()), arg);
+  } else if (cmd == "report") {
     write_report();
   } else if (cmd == "profile") {
     const int count = static_cast<int>(std::size(kTestProfiles));
@@ -468,6 +473,11 @@ void set_swapchain(uint32_t width, uint32_t height, reshade::api::format format)
 }
 
 void on_present(reshade::api::effect_runtime *runtime) {
+  static bool ue3_described = false;  // diagnostic des commandes du moteur, une fois (recherche ~0,3 s)
+  if (!ue3_described) {
+    ue3_described = true;
+    akfsr::ue3::describe();
+  }
   {
     static ULONGLONG window_start = GetTickCount64();
     static uint32_t frames = 0;
