@@ -32,7 +32,7 @@ Priorité actuelle : **valider sur le Deck et y réduire le coût** (voir §6 et
 | M9 : upscaling (rendu < natif) | `ScreenPercentage` du jeu cassé sur PC (testé) : voie simple fermée | — |
 | M10 : FSR 4 sans OptiScaler (provider du pilote AMD, code MIT) | M10.2–M10.3 fonctionnent (FP8) | fonctionne : INT8, 47 fps |
 | M11 : FSR 4 Lite par la DLL DX12 | à faire | à faire |
-| M13 : performances sur Deck | — | §1 mesures codé (`[Debug] FrameLog`, `PerfOverlay`), à relever ; O1–O6 après validation |
+| M13 : performances sur Deck | — | **clos (01/11/2026)** : mesuré, surcoût d'AK-FSR ≈ 1 ms, le reste est le modèle FSR 4 Lite (≈ 8,8 ms) ; pas d'optimisation rentable (voir §7) |
 
 Mesure connue : environ **3,4 ms** par frame sur Deck (FSR 3.1 en 800p, chemin Vulkan), au-delà du
 budget visé de 2 ms. Détail du coût (préparation / FSR / copies / flush DXVK) : à relever sur Deck.
@@ -247,6 +247,27 @@ Ne pas passer au suivant sans validation.
      benchmark, à faire valider avant toute optimisation.**
   2. O1 zéro attente CPU dans l'interop ; O2 suppression des copies ; O3 passes FSR inutiles ; O4 passe MV ;
      O5 à-coups ; O6 SMAA du jeu (test utilisateur). Une optimisation par commit, mesurée après chacune.
+  3. **Bilan (clos le 01/11/2026)**, deux passages du benchmark (CSV dans `/workspace/deck/m13/`) :
+
+     | | Passage 1 | Passage 2 |
+     |---|---|---|
+     | Bench : moy / min / max (fps) | 43,2 (CSV) | 43 / 31 / 54 |
+     | GPU total AK-FSR (moy / p95) | 8,87 / 9,82 ms | 8,81 / 9,69 ms |
+     | dont FSR 4 Lite | 7,83 ms | 7,77 ms |
+     | copies d'entrée / MV / copie de sortie / pluie après FSR | 0,37 / 0,26 / 0,10 / 0,27 ms | idem |
+     | bulles avant / après (médiane) | 0,01 / 0,03 ms | idem |
+     | CPU : flush / verrou / fence / DLL AMD | 0,32 / ≈ 0,01 / 0,02 / 0 ms | 0,29 / ≈ 0,01 / 0,02 / 0 ms |
+
+     Surcoût hors modèle ≈ 1,0 ms (objectif ≤ 1 ms quasi atteint sans rien changer) ; le modèle FSR 4 Lite coûte
+     ≈ 7,8 ms sur Van Gogh (RDNA 2, sans instructions matricielles INT8), pas ≈ 3 ms comme supposé : objectif 47 fps
+     inatteignable par O1–O5 (≤ 1 ms à gagner : O1 inutile, attentes CPU nulles ; O2 bloqué, GetVulkanImageInfo fige
+     DXVK). Chutes du minimum : pas dues à AK-FSR (aucune création ni attente sur les frames lentes), sauf
+     l'à-coup du premier passage (compute shader de la pluie compilé à la première frame : O5, non fait).
+     Pistes explorées ensuite, sans gain : upscaling FSR 4 en jeu (M9 relancé : 67 / 58 / 50 % -> 45 / 45 / 42 fps,
+     le jeu seul ne s'allège pas avec la résolution sur le Deck). Restent possibles hors M13 : FSR 3.1 en mode
+     « performance » (≈ 5 ms de moins), ou cap à 40 fps / 80 Hz avec lsfg-vk.
+     Acquis de M13 : mesures (`[Debug] FrameLog`), commandes du moteur (`ue3`), `texshot`, `cbset`, correction de
+     l'origine de vue à ScreenPercentage < 100.
 
 ## 8. FSR 4 (notes)
 
