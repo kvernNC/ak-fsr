@@ -7,8 +7,8 @@ anti-aliasing: the game renders at your resolution, FSR 4 removes aliasing and s
 render at a lower resolution and FSR 4 upscales it (see *Render resolution* below).
 
 > **FSR 4: Linux (Proton) + AMD Radeon only.** The add-on talks to FSR 4 through DXVK's Vulkan interop and AMD's
-> FSR 4 driver library. **On Windows** (native D3D11, no DXVK), it falls back to **FSR 3.1** with FidelityFX's
-> native DX11 backend (new in 0.9.0, see *Windows* below).
+> FSR 4 driver library. **On Windows** (native D3D11, no DXVK), it uses **FSR 3.1** with FidelityFX's native DX11
+> backend instead (new in 0.9.0, tested on an RX 9070 XT; see *Windows* below).
 >
 > Personal, experimental project. Tested with the Steam version 1.6.2.0 of the game on an RX 9070 XT
 > (CachyOS, Mesa RADV) and on a Steam Deck OLED (SteamOS, Lite model).
@@ -54,7 +54,7 @@ HDR back buffer), upscaling is disabled for the session and the game upscales by
 | Linux, AMD RDNA 4 (RX 9000), Proton | **tested** (RX 9070 XT, all four models) |
 | Linux, AMD RDNA 2 / 3, Proton | should work (INT8 / INT8-2), not tested |
 | Steam Deck (SteamOS) | **tested** with the Lite model forced in the tab (`FSR4L-i8`): about 7.8 ms per frame at 800p, built-in benchmark 43 fps average (59 without the add-on) |
-| Windows (native D3D11, no DXVK) | **FSR 3.1 (DX11)**, new in 0.9.0, not validated yet |
+| Windows (native D3D11, no DXVK) | **tested**: FSR 3.1 (DX11), new in 0.9.0 (RX 9070 XT, ReShade 6.8.0) |
 | Windows with DXVK | not supported (see *Windows: FSR 4 help wanted*) |
 | NVIDIA / Intel on Linux | not supported (FSR 4 needs AMD's driver library) |
 

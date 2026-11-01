@@ -8,7 +8,7 @@ from a lower render resolution. New in 0.9.0: **FSR 3.1 on Windows** (native DX1
 
 - **FSR 4: Linux (Proton) + AMD Radeon GPU only.** Not NVIDIA / Intel.
 - **Windows** (native D3D11, **without DXVK**): **FSR 3.1** with FidelityFX's DX11 backend instead of FSR 4; no
-  model selector, driver watermark or upscaling. New in 0.9.0 and not validated yet: see *Windows* below.
+  model selector, driver watermark or upscaling. New in 0.9.0, tested on an RX 9070 XT: see *Windows* below.
 - **Not compatible with OptiScaler** (crashes). Remove it.
 - Tested on an RX 9070 XT (all four FSR 4 models) and on a Steam Deck OLED with the Lite model forced in the tab
   (about 7.8 ms per frame at 800p: built-in benchmark 43 fps average, 59 without the add-on). RDNA 2 / 3 desktop

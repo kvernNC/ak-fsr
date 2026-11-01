@@ -18,7 +18,7 @@
 
 ### Notes
 - Linux / Proton is unchanged (FSR 4, models, watermark, Steam Deck).
-- Windows is not validated yet.
+- Windows tested on an RX 9070 XT (ReShade 6.8.0, no DXVK): FSR 3.1 DX11 backend chosen and running.
 
 ## 0.8.0 — 2026-11-01
 

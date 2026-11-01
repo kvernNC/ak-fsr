@@ -282,7 +282,8 @@ Ne pas passer au suivant sans validation.
   (textures NT partagées + `VK_KHR_external_memory_win32`, fence partagée importée en sémaphore timeline) : hors
   périmètre, « help wanted » dans le README. Décision : **backend FSR 3.1 DX11 natif rétabli** (`fsr_dx11.cpp`,
   `ak-fsr-dx11.dll`, portage gameplug-labs fsr3-v3.1.2, MIT), choisi automatiquement quand le device D3D11 ne répond pas
-  à l'interop DXVK ; chemin FSR 4 Linux inchangé. À valider sous Windows : `Redirecting D3D11CreateDevice` dans le log,
+  à l'interop DXVK ; chemin FSR 4 Linux inchangé. **Validé sous Windows le 01/11/2026** (RX 9070 XT, ReShade 6.8.0 global,
+  DLL de DXVK retirées du dossier du jeu) : FSR 3.1 DX11 choisi et actif. Restait à relever : `Redirecting D3D11CreateDevice` dans le log,
   `backend : FSR 3.1 (DX11 natif)`, contexte FSR 3 créé ; benchmark 1440p comparé à la référence mod DLAA + OptiScaler +
   FSR 4 FP8 (116 / 80 / 144 fps de moyenne / min / max, sans limiteur).
 
