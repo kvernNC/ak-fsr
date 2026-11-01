@@ -190,6 +190,15 @@ Ne pas passer au suivant sans validation.
     passe d'agrandissement du moteur et y insérer FSR, avec jitter en pixels de rendu ; (2) sortie de `0xA124DE12`
     (réflexions ?) répétée horizontalement, sans effet visible : comparer à 100 % ; (3) colonne x = 1279 anormale
     (bord droit de l'agrandissement du moteur).
+  - **Upscaling FSR 4 testé sur Deck (01/11, commits 73e0713, d7b5d0b)** : FSR 4 Lite en mode « Quality » (857×535
+    -> 1280×800) avant l'agrandissement du moteur, draw d'agrandissement remplacé par une copie de la sortie (le
+    moteur ne lit son échelle ni dans le CB View ni dans son CB PS). Ça marche (image entière, interface nette), mais
+    **le coût de FSR 4 dépend de la sortie** : 8,9 ms en upscaling contre 8,8 ms en AA natif. Frame ≈ 22 ms (≈ 45 fps)
+    contre ≈ 23 ms en AA natif à 100 % : **gain ≈ 1 à 2 ms seulement**, avec une image plus floue / des traînées en
+    mouvement (vélocité des objets ignorée, entrée après tonemap). Verdict : pas rentable avec FSR 4 Lite sur le Deck ;
+    réglage `Upscale` laissé à 0.
+  - **Piège** : `scale set ScreenPercentage` est sauvegardé par le jeu dans BmSystemSettings.ini à la sortie : toujours
+    remettre 100 en fin de test (lancement suivant à 67 % sinon, rendu dégradé en AA natif).
   - `UpscaleScreenPercentage=False` ne règle rien : post-traitement centré, scène toujours en haut à gauche.
 
 - **M10 — FSR 4 sans OptiScaler, code MIT** (spécification en §8.1). Ordre :
