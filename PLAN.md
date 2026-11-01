@@ -199,6 +199,12 @@ Ne pas passer au suivant sans validation.
     réglage `Upscale` laissé à 0. Plus bas, pas mieux : 58 % -> FSR 9,6 ms, frame 22,2 ms ; 50 % -> FSR 10,3 ms,
     frame 23,7 ms. **Le jeu seul ne s'allège pas avec la résolution** sur le Deck (AK-FSR coupé, même endroit :
     16,7 ms à 100 %, 18,8 ms à 50 %) : il n'est pas limité par les pixels ici (CPU, ombres, géométrie). Piste close.
+  - **Option gardée dans la version publiée (01/11/2026)** : liste « Résolution de rendu » dans l'onglet (100 / 77 / 67 /
+    58 / 50 %), appliquée à chaud par USystemSettings::Exec (module `ue3_exec`, désormais dans la version publiée : import
+    USER32 pour le sous-classement de la fenêtre) et sauvegardée par le jeu. `Upscale` actif par défaut ; en résolution
+    réduite, jamais d'AA natif ; cible de l'agrandissement incompatible (back buffer HDR de RenoDX ?) détectée avant FSR
+    -> upscaling abandonné pour la session, agrandissement du jeu sans AA ni jitter. Intérêt attendu surtout sur les
+    machines limitées par les pixels (ROG Ally / Ally X en 1080p, RDNA 3) : non mesuré.
   - **Piège** : `scale set ScreenPercentage` est sauvegardé par le jeu dans BmSystemSettings.ini à la sortie : toujours
     remettre 100 en fin de test (lancement suivant à 67 % sinon, rendu dégradé en AA natif).
   - `UpscaleScreenPercentage=False` ne règle rien : post-traitement centré, scène toujours en haut à gauche.

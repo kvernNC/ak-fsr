@@ -130,8 +130,12 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
 
   auto *color = reinterpret_cast<ID3D11Resource *>(scene_color.handle);
   jitter::set_enabled(m == mode::fsr && get_fsr_settings().jitter);
-  // M9 : en résolution réduite avec l'upscaling, FSR tourne plus tard (agrandissement du moteur) : rien ici.
-  if (m == mode::fsr && upscale_active() && passes::render_scaled()) return false;
+  // M9 : en résolution réduite, jamais d'AA natif (zone de rendu dans un coin du buffer) : FSR tourne plus tard, à
+  // l'agrandissement du moteur, si l'upscaling est possible ; sinon rien (et pas de jitter, qui ne serait pas résorbé).
+  if (m == mode::fsr && passes::render_scaled()) {
+    jitter::set_enabled(upscale_active() && get_fsr_settings().jitter);
+    return false;
+  }
   if (m == mode::fsr) {
     if (depth.handle == 0 || view_cb == nullptr) return false;
     fsr::frame_inputs in;
@@ -181,7 +185,7 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
 
 bool fsr_active() { return !g_bypass.load(std::memory_order_relaxed) && g_mode.load(std::memory_order_relaxed) == mode::fsr; }
 
-bool upscale_active() { return fsr_active() && get_fsr_settings().upscale; }
+bool upscale_active() { return fsr_active() && get_fsr_settings().upscale && !passes::upscale_unsupported(); }
 
 bool before_upscale(command_list *cmd, resource color, resource depth, resource velocity, const fsr::view_data *view_cb,
                     uint32_t render_w, uint32_t render_h) {

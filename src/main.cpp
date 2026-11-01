@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <iterator>
@@ -20,6 +21,7 @@
 #include "insertion.hpp"
 #include "jitter.hpp"
 #include "passes.hpp"
+#include "ue3_exec.hpp"
 #include "perf.hpp"
 #include "vk_device_hook.hpp"
 #include "version.h"
@@ -124,9 +126,37 @@ bool fsr4_model_combo(akfsr::fsr::settings &s) {
   return true;
 }
 
+// M9 : résolution de rendu du jeu (ScreenPercentage, appliqué à chaud par les commandes du moteur et sauvegardé par
+// le jeu) ; en dessous de 100 %, FSR 4 remonte l'image à la résolution de l'écran (upscaling).
+void render_resolution_combo(reshade::api::effect_runtime *runtime) {
+  static const int kPercents[] = {100, 77, 67, 58, 50};
+  static const char *kLabels[] = {"100 % (AA natif)", "77 % (Ultra Quality)", "67 % (Quality)", "58 % (Balanced)",
+                                  "50 % (Performance)"};
+  uint32_t rw = 0, rh = 0, bw = 0, bh = 0;
+  akfsr::passes::render_size(rw, rh);
+  akfsr::passes::buffer_size(bw, bh);
+  const int current = rw != 0 && bw != 0 ? static_cast<int>(rw * 100.0f / bw + 0.5f) : 100;
+  int choice = 0;
+  for (int i = 0; i < static_cast<int>(std::size(kPercents)); ++i)
+    if (std::abs(kPercents[i] - current) < std::abs(kPercents[choice] - current)) choice = i;
+  ImGui::SetNextItemWidth(200);
+  if (ImGui::Combo("Résolution de rendu", &choice, kLabels, static_cast<int>(std::size(kLabels)))) {
+    auto *hwnd = static_cast<HWND>(runtime->get_hwnd());
+    if (kPercents[choice] < 100) akfsr::ue3::post(hwnd, "scale set UpscaleScreenPercentage True");
+    akfsr::ue3::post(hwnd, "scale set ScreenPercentage " + std::to_string(kPercents[choice]));
+  }
+  if (rw != 0 && bw != 0 && rw < bw) {
+    ImGui::SameLine();
+    if (akfsr::passes::upscale_unsupported())
+      ImGui::TextColored(ImVec4(0.9f, 0.6f, 0.2f, 1.0f), "rendu %ux%u, upscaling FSR impossible (voir log)", rw, rh);
+    else
+      ImGui::Text("rendu %ux%u -> %ux%u par FSR 4", rw, rh, bw, bh);
+  }
+}
+
 #if !AKFSR_DEV_TOOLS
 // Version publiée : un seul choix, l'AA utilisé ; le reste suit les réglages validés (voir fsr.hpp).
-void on_overlay(reshade::api::effect_runtime *) {
+void on_overlay(reshade::api::effect_runtime *runtime_for_overlay) {
   ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " : anti-aliasing FSR 4");
   ImGui::Separator();
   auto s = akfsr::insertion::get_fsr_settings();
@@ -149,6 +179,7 @@ void on_overlay(reshade::api::effect_runtime *) {
     ImGui::SameLine();
     model_changed |= ImGui::Checkbox("Watermark du pilote", &s.fsr4_watermark);
     if (model_changed) akfsr::insertion::set_fsr_settings(s);
+    if (!off) render_resolution_combo(runtime_for_overlay);
     ImGui::Text("Version : FSR %s", akfsr::fsr4::kDriverVersionName);
     ImGui::Text("Modèle utilisé : %s", !driver.model.empty() ? driver.model.c_str() : "pas encore connu");
   }
@@ -156,7 +187,7 @@ void on_overlay(reshade::api::effect_runtime *) {
     ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.4f, 1.0f), "FSR : %s", info.status.c_str());
 }
 #else
-void on_overlay(reshade::api::effect_runtime *) {
+void on_overlay(reshade::api::effect_runtime *runtime) {
   akfsr::fsr::note_overlay_visible();
 #if AKFSR_DEV_TOOLS
   ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " (développement, " AKFSR_MILESTONE ")");
@@ -190,6 +221,7 @@ void on_overlay(reshade::api::effect_runtime *) {
                 driver_info.model.empty() ? "pas encore connu" : driver_info.model.c_str(), driver_info.context_shaders,
                 driver_info.context_hash);
   }
+  render_resolution_combo(runtime);
   fsr_changed |= ImGui::Checkbox("Remplacer le SMAA du jeu (AA du jeu sur On)", &fsr_settings.smaa_insertion);
   ImGui::SetNextItemWidth(160);
   fsr_changed |= ImGui::SliderFloat("Biais de LOD (au prochain lancement ; -1 conseillé)", &fsr_settings.lod_bias,

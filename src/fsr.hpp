@@ -58,8 +58,9 @@ struct settings {
   // compatibilité des fichiers ReShade.ini : sans effet.
   bool exposure_experimental = false;
   // M9 : upscaling FSR 4 quand le jeu rend en résolution réduite (ScreenPercentage < 100) : FSR remplace
-  // l'agrandissement du moteur (après le tonemap) au lieu de l'AA natif. Sans effet à 100 %.
-  bool upscale = false;
+  // l'agrandissement du moteur (après le tonemap) au lieu de l'AA natif. Sans effet à 100 %. Désactivé : en résolution
+  // réduite, ni AA ni upscaling (agrandissement du jeu).
+  bool upscale = true;
 };
 
 struct frame_inputs {

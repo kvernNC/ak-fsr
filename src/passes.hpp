@@ -61,7 +61,9 @@ bool shader_patches_enabled();
 // M9 : le jeu rend en résolution réduite (taille de rendu < buffer, lue dans le CB View) ; taille de rendu.
 bool render_scaled();
 void render_size(uint32_t &width, uint32_t &height);
-void set_upscale_fix(int variant);  // outils de dev : raccordement à l'agrandissement du moteur (voir passes.cpp)
+void buffer_size(uint32_t &width, uint32_t &height);
+void set_upscale_fix(int variant);
+bool upscale_unsupported();  // M9 : cible de l'agrandissement incompatible (upscaling abandonné pour la session)  // outils de dev : raccordement à l'agrandissement du moteur (voir passes.cpp)
 
 // M8.1 : option d'insertion au SMAA (suivi des pixel shaders seulement si active) ; réarme après un échec.
 void set_smaa_insertion(bool enabled);

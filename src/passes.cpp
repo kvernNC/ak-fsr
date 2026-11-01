@@ -291,6 +291,32 @@ ID3D11Buffer *g_vs_b0 = nullptr, *g_vs_b0_original = nullptr;  // variantes 1 / 
 // Variante de raccordement (outils de dev « upscalefix ») : 0 CB View du VS ; 1 + VS b0 c6.xy = 1 / rendu ;
 // 2 + VS b0 c6 = (1 / rendu, rendu) ; 3 draw sauté, sortie de FSR copiée dans la cible du draw (back buffer).
 std::atomic<int> g_upscale_fix{3};
+// Cible de l'agrandissement incompatible avec une copie (taille / format, ex. back buffer HDR de RenoDX) : upscaling
+// abandonné pour la session, le jeu agrandit lui-même (sans AA).
+std::atomic<bool> g_upscale_unsupported{false};
+
+// Cible (RT0) du draw d'agrandissement : même taille et même format que la texture à copier ? nullptr sinon.
+ID3D11Resource *upscale_target(ID3D11DeviceContext *ctx, const D3D11_TEXTURE2D_DESC &d) {
+  ID3D11RenderTargetView *rtv = nullptr;
+  ctx->OMGetRenderTargets(1, &rtv, nullptr);
+  if (rtv == nullptr) return nullptr;
+  ID3D11Resource *target = nullptr;
+  rtv->GetResource(&target);
+  rtv->Release();
+  ID3D11Texture2D *tt = nullptr;
+  bool ok = false;
+  if (target != nullptr && SUCCEEDED(target->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&tt)))) {
+    D3D11_TEXTURE2D_DESC td;
+    tt->GetDesc(&td);
+    tt->Release();
+    ok = td.Width == d.Width && td.Height == d.Height && td.Format == d.Format;
+  }
+  if (!ok && target != nullptr) {
+    target->Release();
+    target = nullptr;
+  }
+  return target;
+}
 
 bool render_scaled_now() {
   const uint32_t rw = g_render_w.load(std::memory_order_relaxed), bw = g_buffer_w.load(std::memory_order_relaxed);
@@ -370,7 +396,8 @@ void override_vs_b0(ID3D11DeviceContext *ctx, uint32_t rw, uint32_t rh, bool wit
 }
 
 bool upscale_before_draw(command_list *cmd) {
-  if (g_current.upscaled || !insertion::upscale_active() || !render_scaled_now()) return false;
+  if (g_current.upscaled || !insertion::upscale_active() || !render_scaled_now() || g_upscale_unsupported.load())
+    return false;
   auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
   const uint32_t bw = g_buffer_w.load(), bh = g_buffer_h.load(), rw = g_render_w.load(), rh = g_render_h.load();
   // Entrée : t0 du PS, de la taille du buffer (sinon ce n'est pas l'agrandissement final).
@@ -392,6 +419,26 @@ bool upscale_before_draw(command_list *cmd) {
     res->Release();
     return false;
   }
+  // Variante 3 : cible vérifiée avant FSR (sinon image zoomée : FSR aurait déjà écrit toute la texture).
+  const int fix = g_upscale_fix.load();
+  ID3D11Resource *target = nullptr;
+  if (fix == 3) {
+    target = upscale_target(ctx, d);
+    if (target == nullptr) {
+      g_upscale_unsupported = true;
+      reshade::log::message(reshade::log::level::warning,
+                            "AK-FSR: M9 : cible de l'agrandissement du moteur incompatible (taille / format, RenoDX ?) : "
+                            "upscaling FSR abandonné, agrandissement du jeu");
+      res->Release();
+      return false;
+    }
+  }
+  struct target_releaser {
+    ID3D11Resource *r;
+    ~target_releaser() {
+      if (r != nullptr) r->Release();
+    }
+  } keep_target{target};
   uint64_t depth = 0;
   fsr::view_data view{};
   {
@@ -412,35 +459,16 @@ bool upscale_before_draw(command_list *cmd) {
   } keep{color_res};
   g_current.upscaled = true;  // une seule tentative par frame
   if (!ok) return false;
-  const int fix = g_upscale_fix.load();
   if (fix == 3) {
     // Sortie de FSR (toute la texture) copiée dans la cible du draw, qui est sauté.
-    ID3D11RenderTargetView *rtv = nullptr;
-    ctx->OMGetRenderTargets(1, &rtv, nullptr);
-    if (rtv == nullptr) return false;
-    ID3D11Resource *target = nullptr;
-    rtv->GetResource(&target);
-    rtv->Release();
-    ID3D11Texture2D *tt = nullptr;
-    bool copied = false;
-    if (target != nullptr && SUCCEEDED(target->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&tt)))) {
-      D3D11_TEXTURE2D_DESC td;
-      tt->GetDesc(&td);
-      tt->Release();
-      if (td.Width == d.Width && td.Height == d.Height && td.Format == d.Format) {
-        ctx->CopyResource(target, color_res);
-        copied = true;
-      }
-    }
-    if (target != nullptr) target->Release();
+    ctx->CopyResource(target, color_res);
     static bool logged = false;
     if (!logged) {
       logged = true;
-      reshade::log::message(copied ? reshade::log::level::info : reshade::log::level::warning,
-                            copied ? "AK-FSR: M9 : agrandissement du moteur remplacé par la sortie de FSR (copie)"
-                                   : "AK-FSR: M9 : cible de l'agrandissement incompatible (taille / format) : copie impossible");
+      reshade::log::message(reshade::log::level::info,
+                            "AK-FSR: M9 : agrandissement du moteur remplacé par la sortie de FSR 4 (upscaling)");
     }
-    return copied;
+    return true;
   }
   // CB View du draw : zone de rendu = texture entière.
   std::array<float, kViewCbSize / 4> cb;
@@ -775,7 +803,12 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
 
 void set_shader_patches_enabled(bool enabled) { g_patches_enabled = enabled; }
 bool render_scaled() { return render_scaled_now(); }
+void buffer_size(uint32_t &width, uint32_t &height) {
+  width = g_buffer_w.load();
+  height = g_buffer_h.load();
+}
 void set_upscale_fix(int variant) { g_upscale_fix = variant; }
+bool upscale_unsupported() { return g_upscale_unsupported.load(); }
 void render_size(uint32_t &width, uint32_t &height) {
   width = g_render_w.load();
   height = g_render_h.load();
