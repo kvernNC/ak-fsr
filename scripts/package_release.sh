@@ -15,6 +15,7 @@ signed="$root/third_party/ffx-signed"
 cp "$signed/amd_fidelityfx_loader_dx12.dll" "$out/Binaries/Win64/ak-fsr4-linux-amd/amd_fidelityfx_loader_vk.dll"
 cp "$signed/amd_fidelityfx_upscaler_dx12.dll" "$out/Binaries/Win64/ak-fsr4-linux-amd/amd_fidelityfx_upscaler_vk.dll"
 cp "$root/NEXUS.md" "$out/README-AK-FSR4-Linux-AMD.md"
+cp "$root/CHANGELOG.md" "$out/CHANGELOG-AK-FSR4-Linux-AMD.md"
 cp "$root/LICENSE" "$out/LICENSE-AK-FSR4-Linux-AMD.txt"
 if find "$out" -iname 'amdvkffx64.dll' -o -iname 'amdxcffx64.dll' | grep -q .; then
   echo "ERREUR : DLL propriétaire AMD dans l'archive" >&2

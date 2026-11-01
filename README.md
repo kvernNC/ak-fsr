@@ -95,7 +95,8 @@ Settings are saved in `ReShade.ini`, section `[AK-FSR]`.
 - **Shader rewriting**: DXBC bytecode of jitter-sensitive game shaders is patched at creation so position
   reconstruction matches the jittered depth.
 
-Design notes, game passes and pitfalls: [PLAN.md](PLAN.md). Test log: [PROGRESS.md](PROGRESS.md).
+Design notes, game passes and pitfalls: [PLAN.md](PLAN.md). Test log: [PROGRESS.md](PROGRESS.md). Changes:
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Building (from Linux)
 
