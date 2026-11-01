@@ -2,6 +2,7 @@
 #include "perf.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -405,28 +406,99 @@ bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   return false;
 }
 
-void on_map_buffer(device *, resource res, uint64_t, uint64_t, map_access access, void **data) {
-  if (res.handle != g_view_cb_handle.load(std::memory_order_relaxed) || data == nullptr ||
-      access == map_access::read_only)
+// M9 : à ScreenPercentage < 100, la scène est rendue en haut à gauche du buffer, mais le moteur donne au
+// post-traitement une origine de vue centrée ((buffer - rendu) / 2, ex. (211, 132) pour 857×535 dans 1280×800), dans
+// les CB du jeu (ligne « taille.xy, origine.zw »). On la remet à (0, 0) à l'écriture des CB. Tailles lues dans le
+// CB View (c22 = rendu, c23 = buffer) ; rien à faire à 100 % (origine nulle). Voir PLAN.md, M9 relancé.
+std::atomic<float> g_origin_x{0}, g_origin_y{0};  // origine centrée attendue (0 : rien à corriger)
+std::atomic<uint64_t> g_origin_fixes{0};
+thread_local void *t_cb_mapped = nullptr;
+thread_local uint64_t t_cb_handle = 0, t_cb_size = 0;
+constexpr uint64_t kMaxCbBytes = 4096;
+
+void note_view_sizes(const float *view, size_t floats) {
+  if (floats < 96) return;
+  const float rw = view[88], rh = view[89], bw = view[92], bh = view[93];  // c22.xy, c23.xy
+  const bool valid = rw > 0 && rh > 0 && bw >= rw && bh >= rh && bw < 16384 && bh < 16384;
+  g_origin_x.store(valid ? (bw - rw) * 0.5f : 0.0f, std::memory_order_relaxed);
+  g_origin_y.store(valid ? (bh - rh) * 0.5f : 0.0f, std::memory_order_relaxed);
+}
+
+// Réécrit les lignes dont .zw vaut l'origine centrée ; true si une ligne a changé.
+bool fix_view_origin(float *cb, uint64_t bytes) {
+  const float ox = g_origin_x.load(std::memory_order_relaxed), oy = g_origin_y.load(std::memory_order_relaxed);
+  if (ox < 1.0f && oy < 1.0f) return false;
+  bool changed = false;
+  for (uint64_t r = 0; r + 16 <= bytes; r += 16) {
+    float *v = cb + r / 4;
+    // Le moteur arrondit l'origine à l'entier inférieur (211,5 -> 211).
+    if (std::fabs(v[2] - std::floor(ox)) < 0.01f && std::fabs(v[3] - std::floor(oy)) < 0.01f && v[0] > 0 &&
+        v[1] > 0) {
+      v[2] = 0;
+      v[3] = 0;
+      changed = true;
+    }
+  }
+  if (changed && g_origin_fixes.fetch_add(1) == 0) {
+    char buf[160];
+    std::snprintf(buf, sizeof(buf), "AK-FSR: M9 : origine de vue centrée (%.0f, %.0f) remise à (0, 0) dans les CB du "
+                  "post-traitement", std::floor(ox), std::floor(oy));
+    reshade::log::message(reshade::log::level::info, buf);
+  }
+  return changed;
+}
+
+void on_map_buffer(device *dev, resource res, uint64_t, uint64_t size, map_access access, void **data) {
+  if (data == nullptr || access == map_access::read_only) return;
+  if (res.handle == g_view_cb_handle.load(std::memory_order_relaxed)) {
+    t_view_cb_mapped = *data;
     return;
-  t_view_cb_mapped = *data;
+  }
+  if (g_origin_x.load(std::memory_order_relaxed) < 1.0f && g_origin_y.load(std::memory_order_relaxed) < 1.0f) return;
+  const resource_desc desc = dev->get_resource_desc(res);
+  if (desc.type != resource_type::buffer || (desc.usage & resource_usage::constant_buffer) == 0 ||
+      desc.buffer.size > kMaxCbBytes)
+    return;
+  t_cb_mapped = *data;
+  t_cb_handle = res.handle;
+  t_cb_size = size == UINT64_MAX ? desc.buffer.size : std::min<uint64_t>(size, desc.buffer.size);
 }
 
 void on_unmap_buffer(device *, resource res) {
+  if (t_cb_mapped != nullptr && res.handle == t_cb_handle) {
+    fix_view_origin(static_cast<float *>(t_cb_mapped), t_cb_size);
+    t_cb_mapped = nullptr;
+    return;
+  }
   if (t_view_cb_mapped == nullptr || res.handle != g_view_cb_handle.load(std::memory_order_relaxed)) return;
   std::lock_guard lock(g_view_mutex);
   std::memcpy(g_view_head.data(), t_view_cb_mapped, sizeof(g_view_head));
+  note_view_sizes(static_cast<const float *>(t_view_cb_mapped), 96);
   g_view_valid = true;
   g_view_known = true;
   t_view_cb_mapped = nullptr;
 }
 
-bool on_update_buffer(device *, const void *data, resource dst, uint64_t offset, uint64_t size) {
-  if (dst.handle != g_view_cb_handle.load(std::memory_order_relaxed) || data == nullptr || offset != 0 ||
-      (size != UINT64_MAX && size < sizeof(g_view_head)))
-    return false;
+bool on_update_buffer(device *dev, const void *data, resource dst, uint64_t offset, uint64_t size) {
+  if (data == nullptr) return false;
+  if (dst.handle != g_view_cb_handle.load(std::memory_order_relaxed)) {
+    // M9 : CB écrits par UpdateSubresource : copie corrigée écrite à la place de l'original.
+    if (offset != 0 || (g_origin_x.load() < 1.0f && g_origin_y.load() < 1.0f)) return false;
+    const resource_desc desc = dev->get_resource_desc(dst);
+    if (desc.type != resource_type::buffer || (desc.usage & resource_usage::constant_buffer) == 0 ||
+        desc.buffer.size > kMaxCbBytes)
+      return false;
+    const uint64_t bytes = size == UINT64_MAX ? desc.buffer.size : std::min<uint64_t>(size, desc.buffer.size);
+    float copy[kMaxCbBytes / 4];
+    std::memcpy(copy, data, static_cast<size_t>(bytes));
+    if (!fix_view_origin(copy, bytes)) return false;
+    dev->update_buffer_region(copy, dst, 0, bytes);
+    return true;
+  }
+  if (offset != 0 || (size != UINT64_MAX && size < sizeof(g_view_head))) return false;
   std::lock_guard lock(g_view_mutex);
   std::memcpy(g_view_head.data(), data, sizeof(g_view_head));
+  if (size == UINT64_MAX || size >= 96 * sizeof(float)) note_view_sizes(static_cast<const float *>(data), 96);
   g_view_valid = true;
   g_view_known = true;
   return false;
