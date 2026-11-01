@@ -10,7 +10,7 @@ render at a lower resolution and FSR 4 upscales it (see *Render resolution* belo
 > driver library. It does not work on Windows, nor on NVIDIA / Intel GPUs.
 >
 > Personal, experimental project. Tested with the Steam version 1.6.2.0 of the game on an RX 9070 XT
-> (CachyOS, Mesa RADV).
+> (CachyOS, Mesa RADV) and on a Steam Deck OLED (SteamOS, Lite model).
 
 ## Features
 
@@ -52,7 +52,7 @@ HDR back buffer), upscaling is disabled for the session and the game upscales by
 |---|---|
 | Linux, AMD RDNA 4 (RX 9000), Proton | **tested** (RX 9070 XT, all four models) |
 | Linux, AMD RDNA 2 / 3, Proton | should work (INT8 / INT8-2), not tested |
-| Steam Deck (SteamOS) | earlier build tested with INT8; Lite model to be tested |
+| Steam Deck (SteamOS) | **tested** with the Lite model forced in the tab (`FSR4L-i8`): about 7.8 ms per frame at 800p, built-in benchmark 43 fps average (59 without the add-on) |
 | Windows | **not supported** |
 | NVIDIA / Intel | **not supported** |
 

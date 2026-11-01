@@ -8,8 +8,9 @@ from a lower render resolution.
 
 - **Linux (Proton) + AMD Radeon GPU only.** Not Windows, not NVIDIA / Intel.
 - **Not compatible with OptiScaler** (crashes). Remove it.
-- Tested on an RX 9070 XT (all four FSR 4 models). RDNA 2 / 3 desktop GPUs should work but are not tested;
-  the Steam Deck with the Lite model is not tested yet.
+- Tested on an RX 9070 XT (all four FSR 4 models) and on a Steam Deck OLED with the Lite model forced in the tab
+  (about 7.8 ms per frame at 800p: built-in benchmark 43 fps average, 59 without the add-on). RDNA 2 / 3 desktop
+  GPUs should work but are not tested.
 
 ## Requirements
 
