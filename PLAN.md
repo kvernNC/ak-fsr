@@ -181,13 +181,15 @@ Ne pas passer au suivant sans validation.
     (c12), chaîne de flou / DoF `0x0E6435F4`, `0x2B46745A` et `0x26C26A50`, `0x65FE6DB3`, `0x6F9D46E3`, `0x983D7D7F`,
     `0xAE739EF7`, `0xB029C097`, `0xB42A7F40`, `0xCA507609` (c6), `0x0EF4130E`, `0x41F457B3`, `0x5A988DD0`,
     `0x978BFB09`, `0x98C5C8CA`, `0xF98BC308`, PS `0x311E0BDA` (c7), `0xB2A276FD` (c8).
-  - **Reste** : (1) profondeur de champ : avec l'origine forcée à 0 partout, couleurs correctes mais image encore décalée
-    de 1,5 × (211, 132) → une passe DoF prend l'origine ailleurs (à chercher par `texshot` le long de la chaîne DoF) ;
-    (2) sortie de `0xA124DE12` (réflexions ?) répétée horizontalement, sans effet visible sur l'image finale : comparer
-    à 100 % ; (3) correction durable : réécrire l'origine (211, 132) -> (0, 0) dans les CB du jeu quand
-    ScreenPercentage < 100 (à l'unmap / update des CB, ou dans le code moteur qui la calcule), au lieu de `cbset` qui
-    relit chaque CB (lent) ; (4) brancher FSR 4 en upscaling (entrée 857×535 en haut à gauche, sortie 1280×800) à la
-    place de l'agrandissement du moteur (pixelisé).
+  - **Correction durable (commit 227e87f, vérifiée sur Deck le 01/11)** : AK-FSR réécrit l'origine centrée en (0, 0)
+    à l'écriture des CB du jeu (`fix_view_origin` dans `src/passes.cpp`, actif seulement si rendu < buffer). À 67 % :
+    image correcte, sans coupure, **profondeur de champ comprise** (le décalage DoF vu avec `cbset` venait d'un CB que
+    `cbset` ne couvrait pas). Jeu à 57 fps avec FSR 4 Lite toujours en AA sur tout le buffer (≈ 7,8 ms).
+  - **Reste** : (1) **brancher FSR 4 en upscaling** (entrée 857×535 en haut à gauche, sortie 1280×800) à la place de
+    l'agrandissement du moteur (pixelisé) : c'est là qu'est le gain (jeu seul à 67 % : 90 fps) ; il faut repérer la
+    passe d'agrandissement du moteur et y insérer FSR, avec jitter en pixels de rendu ; (2) sortie de `0xA124DE12`
+    (réflexions ?) répétée horizontalement, sans effet visible : comparer à 100 % ; (3) colonne x = 1279 anormale
+    (bord droit de l'agrandissement du moteur).
   - `UpscaleScreenPercentage=False` ne règle rien : post-traitement centré, scène toujours en haut à gauche.
 
 - **M10 — FSR 4 sans OptiScaler, code MIT** (spécification en §8.1). Ordre :
