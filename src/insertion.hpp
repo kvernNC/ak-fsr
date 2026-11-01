@@ -26,15 +26,6 @@ bool before_post_pass(reshade::api::command_list *cmd, reshade::api::resource sc
 // Mode FSR effectif (ni Off, ni coupé par la touche) : les passes du jeu peuvent être remplacées.
 bool fsr_active();
 
-// M9 : upscaling demandé (réglage Upscale) et FSR actif. Il ne s'applique que si le jeu rend en résolution réduite
-// (passes::render_scaled) : l'AA natif est alors sauté et FSR tourne à l'agrandissement du moteur.
-bool upscale_active();
-// M9 : FSR 4 de la zone de rendu (render_w × render_h en haut à gauche de `color`) vers toute la texture `color`,
-// juste avant l'agrandissement du moteur. true si le résultat a été écrit.
-bool before_upscale(reshade::api::command_list *cmd, reshade::api::resource color, reshade::api::resource depth,
-                    reshade::api::resource velocity, const fsr::view_data *view_cb, uint32_t render_w,
-                    uint32_t render_h);
-
 mode get_mode();
 void set_mode(mode m);
 fsr::settings get_fsr_settings();

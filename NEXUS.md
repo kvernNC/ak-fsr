@@ -1,14 +1,14 @@
 # AK-FSR4-Linux-AMD — FSR 4 anti-aliasing for Batman: Arkham Knight (Linux / Proton + AMD; FSR 3.1 on Windows)
 
 Native-resolution temporal anti-aliasing with **AMD FSR 4** for Batman: Arkham Knight, as a ReShade add-on.
-The game renders at your resolution and FSR 4 replaces the game's SMAA. New in 0.8.0: optional FSR 4 upscaling
-from a lower render resolution. New in 0.9.0: **FSR 3.1 on Windows** (native DX11 backend).
+The game renders at your resolution and FSR 4 replaces the game's SMAA (no upscaling). New in 0.9.0: **FSR 3.1 on
+Windows** (native DX11 backend).
 
 ## Read this first
 
 - **FSR 4: Linux (Proton) + AMD Radeon GPU only.** Not NVIDIA / Intel.
 - **Windows** (native D3D11, **without DXVK**): **FSR 3.1** with FidelityFX's DX11 backend instead of FSR 4; no
-  model selector, driver watermark or upscaling. New in 0.9.0, tested on an RX 9070 XT: see *Windows* below.
+  model selector or driver watermark. New in 0.9.0, tested on an RX 9070 XT: see *Windows* below.
 - **Not compatible with OptiScaler** (crashes). Remove it.
 - Tested on an RX 9070 XT (all four FSR 4 models) and on a Steam Deck OLED with the Lite model forced in the tab
   (about 7.8 ms per frame at 800p: built-in benchmark 43 fps average, 59 without the add-on). RDNA 2 / 3 desktop
@@ -53,19 +53,11 @@ Proton makes that possible), so the add-on would need a native D3D11 ↔ Vulkan 
 
 ## The tab
 
-- **Off / FSR 4**.
+- **Off / FSR** (FSR 4 on Linux, FSR 3.1 on Windows; the backend in use is shown).
 - **FSR 4 model**: Auto (driver's choice for your GPU), FP8 (RDNA 4), INT8 (RDNA 3), INT8-2 (RDNA 2),
   INT8 Lite (handheld). Any model can be forced to compare quality and cost.
 - **Driver watermark**: AMD's overlay shows the FSR 4 provider really running (`FSR4`, `FSR4-i8`, `FSR4-i8-2`,
   `FSR4L-i8`). Leave it off to play.
-- **Render resolution** (new in 0.8.0): 100 % (native AA, default), 77 % (Ultra Quality), 67 % (Quality), 58 %
-  (Balanced), 50 % (Performance). Below 100 %, the game renders fewer pixels and FSR 4 upscales to your screen
-  resolution; the UI stays at full resolution. Applied immediately, saved by the game. The add-on also fixes the
-  game's broken `ScreenPercentage` image (seams, offset picture).
-  FSR 4's cost depends on the output resolution, so the gain is only what the game saves: none measured on a Steam
-  Deck (the game is not pixel-limited there), more expected on GPU-limited setups (1080p handhelds, desktop GPUs at
-  high resolution; not measured yet). Limits: slight trails on fast-moving characters, FSR works after tone mapping;
-  if the game's final upscale target does not match (e.g. HDR back buffer), upscaling turns itself off.
 
 ## How it handles the game's shaders
 
@@ -76,7 +68,7 @@ rewrites those shaders in memory when the game creates them. Game files are not 
 
 ## Known limitations
 
-- FSR 4 upscaling (render resolution below 100 %) is new and only tested on a Steam Deck.
+- No upscaling: keep the game's `ScreenPercentage` at 100 (the add-on resets it to 100 if it finds it lower).
 - Falling rain streaks go through FSR and can look slightly softer (splashes are drawn after FSR).
 - Single-player game, no anti-cheat; still a mod that hooks the renderer: use at your own risk.
 

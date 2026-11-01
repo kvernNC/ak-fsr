@@ -12,9 +12,15 @@
   D3D11 device exposes DXVK's interop (Linux / Proton), otherwise FSR 3.1 DX11.
 
 ### Changed
-- The FSR 4 model selector, driver watermark and render resolution (upscaling) are shown for the FSR 4 backend only.
+- The FSR 4 model selector and driver watermark are shown for the FSR 4 backend only.
 - README / Nexus page: Windows installation (ReShade as `dxgi.dll`, no DXVK) and a *FSR 4 on Windows: help wanted*
   section (why DXVK + ReShade cannot be combined on Windows, and the native D3D11 ↔ Vulkan bridge it would need).
+
+### Removed
+- **Render resolution / FSR 4 upscaling** (experimental in 0.8.0): it broke the game on Windows and cost far more
+  than it saved on a desktop GPU (RX 9070 XT at 50 %: about 15 fps instead of 90+), with no gain on the Steam Deck.
+  If the game is found rendering below 100 % (`ScreenPercentage`, e.g. left by 0.8.0), the add-on resets it to 100
+  once per session. The fix for the game's broken `ScreenPercentage` post-processing is kept.
 
 ### Notes
 - Linux / Proton is unchanged (FSR 4, models, watermark, Steam Deck).

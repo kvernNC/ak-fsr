@@ -58,10 +58,6 @@ struct settings {
   // Ancienne neutralisation de M8.5 (plantage dû à OptiScaler chargé dans le processus), conservée pour la
   // compatibilité des fichiers ReShade.ini : sans effet.
   bool exposure_experimental = false;
-  // M9 : upscaling FSR 4 quand le jeu rend en résolution réduite (ScreenPercentage < 100) : FSR remplace
-  // l'agrandissement du moteur (après le tonemap) au lieu de l'AA natif. Sans effet à 100 %. Désactivé : en résolution
-  // réduite, ni AA ni upscaling (agrandissement du jeu).
-  bool upscale = true;
 };
 
 struct frame_inputs {
@@ -70,8 +66,6 @@ struct frame_inputs {
   ID3D11Resource *velocity = nullptr;  // RT4 du G-buffer (r16g16_float, UV préc. - UV cour., jitterée)
   ID3D11Resource *exposure = nullptr;  // M8.5 : R32F 1×1 préparée (nullptr : auto-exposition / aucune)
   ID3D11Resource *output = nullptr;    // destination du résultat (nullptr : `color`) ; même format et taille
-  // M9 : zone de rendu (en haut à gauche de `color`, `depth`, `velocity`) ; 0 = toute la texture (AA natif).
-  uint32_t render_width = 0, render_height = 0;
   view_data view{};                 // CB View c0..c21 (voir kViewFloats)
 };
 

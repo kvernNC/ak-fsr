@@ -618,9 +618,7 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   }
   if (!ready()) return false;
   if (!create_pipeline()) return false;
-  const bool scaled = in.render_width != 0 && in.render_height != 0 &&
-                      (in.render_width < desc.Width || in.render_height < desc.Height);
-  const uint32_t render_w = scaled ? in.render_width : desc.Width, render_h = scaled ? in.render_height : desc.Height;
+  const uint32_t render_w = desc.Width, render_h = desc.Height;  // AA natif : rendu = sortie
   if (!ensure_images(desc.Format, desc.Width, desc.Height, in.exposure != nullptr, render_w, render_h)) return false;
   const bool use_exposure = in.exposure != nullptr && g.exposure.handle != VK_NULL_HANDLE;
   if (!ensure_context(s, use_exposure)) return false;
@@ -634,12 +632,7 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   ID3D11DeviceContext *imm = ctx().immediate;
   if (now_ms() - g_overlay_seen_ms.load(std::memory_order_relaxed) < 1000.0) g_total_timer.begin(ctx().d3d, imm);
   perf::d3d_mark(imm, perf::mark::copy_in_start);
-  if (scaled) {
-    const D3D11_BOX box{0, 0, 0, g.render_w, g.render_h, 1};
-    imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, &box);
-  } else {
-    imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
-  }
+  imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
   imm->CopySubresourceRegion(g.depth_src.texture, 0, 0, 0, 0, in.depth, 0, nullptr);
   if (objects) imm->CopySubresourceRegion(g.velocity_src.texture, 0, 0, 0, 0, in.velocity, 0, nullptr);
   if (use_exposure) imm->CopySubresourceRegion(g.exposure.texture, 0, 0, 0, 0, in.exposure, 0, nullptr);

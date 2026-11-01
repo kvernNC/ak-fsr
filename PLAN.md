@@ -275,6 +275,12 @@ Ne pas passer au suivant sans validation.
      Acquis de M13 : mesures (`[Debug] FrameLog`), commandes du moteur (`ue3`), `texshot`, `cbset`, correction de
      l'origine de vue à ScreenPercentage < 100.
 
+- **Upscaling retiré (0.9.0, 01/11/2026)** : il cassait le jeu sous Windows et coûtait bien plus qu'il ne rapportait sur
+  RX 9070 XT (50 % : ≈ 15 fps au lieu de 90+, cause non analysée), sans gain sur le Deck. Retirés : liste « Résolution de
+  rendu », réglage `Upscale`, FSR à l'agrandissement du moteur, commandes `upscale` / `upscalefix`. Gardés : correction de
+  l'origine de vue (`fix_view_origin`, inerte à 100 %), détection de la résolution réduite, et remise à 100 % de
+  `ScreenPercentage` une fois par session si AK-FSR est actif et trouve le jeu en résolution réduite (module `ue3_exec`
+  gardé dans la version publiée pour cela). Historique du code : commits 73e0713 à 32f49c6.
 - **M14 — Windows (0.9.0, 01/11/2026)** : sous Windows, DXVK et ReShade ne se combinent pas (ReShade accroche
   `system32\d3d11.dll` alors que le jeu charge le `d3d11.dll` de DXVK : ReShade retombe sur le Vulkan de DXVK, l'addon ne
   voit que du SPIR-V et ne trouve aucune passe ; remplacer le `dxgi.dll` de DXVK par celui de ReShade plante). Testé sur

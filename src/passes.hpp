@@ -19,8 +19,7 @@ constexpr uint32_t kSmaaEdgePs = 0x067FF80F;   // SMAAEdgeDetection : t1 profond
 constexpr uint32_t kSmaaWeightsPs = 0x2F55F98E;  // SMAABlendingWeightCalculation
 constexpr uint32_t kVelocityCs = 0xF98BC308;   // t0 profondeur, t1 vélocité objets -> u0 vélocité combinée
 constexpr std::array<uint32_t, 4> kTonemapCs = {0x978BFB09, 0xB6B56605, 0xF01CCC7E, 0x3A4E0B90};
-constexpr uint64_t kViewCbSize = 608;
-constexpr uint32_t kUpscalePs = 0x7E7E0E57;  // M9 : agrandissement final du moteur (zone de rendu -> back buffer)          // CB « View » UE3 en b1 des passes post
+constexpr uint64_t kViewCbSize = 608;          // CB « View » UE3 en b1 des passes post
 
 struct found_resource {
   uint64_t handle = 0;
@@ -62,8 +61,6 @@ bool shader_patches_enabled();
 bool render_scaled();
 void render_size(uint32_t &width, uint32_t &height);
 void buffer_size(uint32_t &width, uint32_t &height);
-void set_upscale_fix(int variant);
-bool upscale_unsupported();  // M9 : cible de l'agrandissement incompatible (upscaling abandonné pour la session)  // outils de dev : raccordement à l'agrandissement du moteur (voir passes.cpp)
 
 // M8.1 : option d'insertion au SMAA (suivi des pixel shaders seulement si active) ; réarme après un échec.
 void set_smaa_insertion(bool enabled);
