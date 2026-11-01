@@ -62,6 +62,10 @@ HDR back buffer), upscaling is disabled for the session and the game upscales by
 - [ReShade](https://reshade.me) 6.7.3+ **with add-on support**, installed as `dxgi.dll` in `Binaries/Win64`.
 - Steam launch option: `WINEDLLOVERRIDES="dxgi=n,b" %command%`.
 - In-game graphics options: **Anti-Aliasing On** (FSR 4 takes the SMAA's place) and **Motion Blur On**.
+  Motion blur is required: with it Off, the game stops updating the object velocity buffer the add-on reads, and
+  FSR 4 then shows **more aliasing than no AA at all** (the whole picture shimmers).
+- Keep `DepthOfField=True` in `BmSystemSettings.ini` (default; not in the in-game menu): with depth of field off,
+  the game skips the passes the add-on hooks into and FSR 4 may not run at all.
 - `amdvkffx64.dll` from AMD's Windows driver (see below): AMD's FSR 4 library, proprietary, **not included**.
 - Not compatible with **OptiScaler** (both hook FidelityFX and Vulkan: crashes). Remove it.
 - Optional: [RenoDX](https://github.com/clshortfuse/renodx) for HDR (compatible).

@@ -18,7 +18,10 @@ from a lower render resolution.
 - [ReShade](https://reshade.me) 6.7.3 or newer **with add-on support**, installed as `dxgi.dll` in `Binaries/Win64`.
 - Launch option: `WINEDLLOVERRIDES="dxgi=n,b" %command%`.
 - In the game's graphics options: **Anti-Aliasing On** (FSR 4 takes the place of the game's SMAA) and
-  **Motion Blur On**.
+  **Motion Blur On**. Motion blur is required: with it Off, the game stops updating the object velocity buffer
+  the add-on reads and FSR 4 shows **more aliasing than no AA at all**.
+- Keep `DepthOfField=True` in `BmSystemSettings.ini` (default; not in the in-game menu): with depth of field off,
+  FSR 4 may not run at all.
 - `amdvkffx64.dll`, AMD's FSR 4 driver library: proprietary, **not in this archive** (see below).
 - Optional: [RenoDX](https://github.com/clshortfuse/renodx) for HDR (compatible).
 
