@@ -196,7 +196,9 @@ Ne pas passer au suivant sans validation.
     **le coût de FSR 4 dépend de la sortie** : 8,9 ms en upscaling contre 8,8 ms en AA natif. Frame ≈ 22 ms (≈ 45 fps)
     contre ≈ 23 ms en AA natif à 100 % : **gain ≈ 1 à 2 ms seulement**, avec une image plus floue / des traînées en
     mouvement (vélocité des objets ignorée, entrée après tonemap). Verdict : pas rentable avec FSR 4 Lite sur le Deck ;
-    réglage `Upscale` laissé à 0.
+    réglage `Upscale` laissé à 0. Plus bas, pas mieux : 58 % -> FSR 9,6 ms, frame 22,2 ms ; 50 % -> FSR 10,3 ms,
+    frame 23,7 ms. **Le jeu seul ne s'allège pas avec la résolution** sur le Deck (AK-FSR coupé, même endroit :
+    16,7 ms à 100 %, 18,8 ms à 50 %) : il n'est pas limité par les pixels ici (CPU, ombres, géométrie). Piste close.
   - **Piège** : `scale set ScreenPercentage` est sauvegardé par le jeu dans BmSystemSettings.ini à la sortie : toujours
     remettre 100 en fin de test (lancement suivant à 67 % sinon, rendu dégradé en AA natif).
   - `UpscaleScreenPercentage=False` ne règle rien : post-traitement centré, scène toujours en haut à gauche.
