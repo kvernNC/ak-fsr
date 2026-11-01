@@ -112,8 +112,9 @@ scripts/deploy.sh                # copies into the game folder (set AK_GAME_DIR 
 scripts/package_release.sh       # release archive, never contains AMD's proprietary DLL
 ```
 
-Branches: `main` is the release build; `dev` builds the same sources with development tools
-(`-DAKFSR_DEV_TOOLS=ON`: test profiles, remote commands, screenshots, frame capture, see [TESTING.md](TESTING.md)).
+Release build by default; add `-DAKFSR_DEV_TOOLS=ON` (in another build folder) for the development tools: test
+profiles, remote commands, engine commands, screenshots, frame and texture capture, performance log (see
+[TESTING.md](TESTING.md) and [DECK.md](DECK.md)).
 
 ## Known limitations
 
