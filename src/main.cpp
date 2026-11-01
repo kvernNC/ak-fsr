@@ -157,22 +157,31 @@ void render_resolution_combo(reshade::api::effect_runtime *runtime) {
 #if !AKFSR_DEV_TOOLS
 // Version publiée : un seul choix, l'AA utilisé ; le reste suit les réglages validés (voir fsr.hpp).
 void on_overlay(reshade::api::effect_runtime *runtime_for_overlay) {
-  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " : anti-aliasing FSR 4");
+  ImGui::TextUnformatted("AK-FSR4-Linux-AMD " AKFSR_VERSION " : anti-aliasing FSR");
   ImGui::Separator();
   auto s = akfsr::insertion::get_fsr_settings();
   const auto info = akfsr::fsr::get_info();
   const auto driver = akfsr::fsr4::get_info();
+  const auto backend = akfsr::fsr::current_backend();
+  const bool dx11 = backend == akfsr::fsr::backend::dx11_fsr3;
   const bool fsr4_possible = akfsr::vk_device_hook::get_status().device_seen && !(driver.tried && !driver.ok);
   const bool off = akfsr::insertion::get_mode() == akfsr::insertion::mode::off;
   int choice = off ? 0 : 1;
   bool changed = ImGui::RadioButton("Off", &choice, 0);
-  ImGui::BeginDisabled(!fsr4_possible && off);
+  ImGui::BeginDisabled(backend == akfsr::fsr::backend::none && off);
   ImGui::SameLine();
-  changed |= ImGui::RadioButton("FSR 4", &choice, 1);
+  changed |= ImGui::RadioButton("FSR", &choice, 1);
   ImGui::EndDisabled();
   if (changed)
     akfsr::insertion::set_mode(choice == 0 ? akfsr::insertion::mode::off : akfsr::insertion::mode::fsr);
-  if (!fsr4_possible) {
+  ImGui::Text("Backend : %s", akfsr::fsr::backend_name(backend));
+  if (dx11) {
+    // FSR 3.1 DX11 (Windows) : ni modèle FSR 4, ni watermark du pilote, ni upscaling.
+    ImGui::Text("Version : FSR %s", info.provider.empty() ? "3.1" : info.provider.c_str());
+    ImGui::TextDisabled("Modèle FSR 4, watermark du pilote et résolution de rendu : FSR 4 (Linux / Proton) seulement");
+  } else if (backend == akfsr::fsr::backend::none) {
+    ImGui::TextDisabled("Ni interop DXVK (FSR 4) ni ak-fsr-dx11.dll (FSR 3.1) : voir README");
+  } else if (!fsr4_possible) {
     ImGui::TextDisabled("FSR 4 : DLL AMD absentes de ak-fsr4-linux-amd\\ ou pilote incompatible (voir README)");
   } else {
     bool model_changed = fsr4_model_combo(s);
@@ -246,6 +255,7 @@ void on_overlay(reshade::api::effect_runtime *runtime) {
   if (fsr_changed) akfsr::insertion::set_fsr_settings(fsr_settings);
 
   ImGui::Separator();
+  ImGui::Text("Backend : %s", akfsr::fsr::backend_name(akfsr::fsr::current_backend()));
   if (!fsr_info.provider.empty()) ImGui::Text("Version utilisée : %s", fsr_info.provider.c_str());
   ImGui::TextWrapped("FSR : %s", fsr_info.status.empty() ? "inactif" : fsr_info.status.c_str());
   if (akfsr::insertion::get_mode() == akfsr::insertion::mode::fsr && !akfsr::jitter::get_status().installed)

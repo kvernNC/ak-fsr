@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.0 — 2026-11-01
+
+### Added
+- **Windows support with FSR 3.1** (native D3D11, without DXVK): FidelityFX's native DX11 backend (FSR 3.1.2,
+  gameplug-labs build) as native-resolution AA in place of the game's SMAA. Jitter, shader fixes, motion vectors,
+  rain after FSR and LOD bias work the same as on Linux. Ships as `ak-fsr-dx11.dll` plus
+  `ffx_backend_dx11_x64.dll` and `ffx_fsr3upscaler_x64.dll` next to the add-on; needs the Visual C++ 2015–2022
+  Redistributable (x64).
+- Automatic backend choice on the first frame, logged with its reason and shown in the tab: FSR 4 Vulkan when the
+  D3D11 device exposes DXVK's interop (Linux / Proton), otherwise FSR 3.1 DX11.
+
+### Changed
+- The FSR 4 model selector, driver watermark and render resolution (upscaling) are shown for the FSR 4 backend only.
+- README / Nexus page: Windows installation (ReShade as `dxgi.dll`, no DXVK) and a *FSR 4 on Windows: help wanted*
+  section (why DXVK + ReShade cannot be combined on Windows, and the native D3D11 ↔ Vulkan bridge it would need).
+
+### Notes
+- Linux / Proton is unchanged (FSR 4, models, watermark, Steam Deck).
+- Windows is not validated yet.
+
 ## 0.8.0 — 2026-11-01
 
 ### Added

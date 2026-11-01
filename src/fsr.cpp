@@ -12,6 +12,7 @@
 #include <reshade.hpp>
 
 #include "fsr4_driver.hpp"
+#include "fsr_dx11.hpp"
 #include "fsr_params.hpp"
 #include "gpu_timer.hpp"
 #include "jitter.hpp"
@@ -526,6 +527,44 @@ void compute_params(const frame_inputs &in, const settings &s, uint32_t width, u
 
 static bool run_frame(const frame_inputs &in, const settings &s);
 
+namespace {
+std::atomic<backend> g_backend{backend::undecided};
+}
+
+const char *backend_name(backend b) {
+  switch (b) {
+    case backend::vulkan_fsr4: return "FSR 4 (Vulkan, interop DXVK, provider du pilote AMD)";
+    case backend::dx11_fsr3: return "FSR 3.1 (DX11 natif)";
+    case backend::none: return "aucun";
+    default: return "pas encore choisi";
+  }
+}
+
+backend current_backend() { return g_backend.load(std::memory_order_relaxed); }
+
+backend select_backend(ID3D11Device *native_device) {
+  backend b = g_backend.load();
+  if (b != backend::undecided) return b;
+  std::string reason;
+  if (vk::init(native_device)) {
+    b = backend::vulkan_fsr4;
+    reason = "le device D3D11 expose l'interop Vulkan de DXVK (" + vk::status() + ")";
+  } else if (dx11::available()) {
+    b = backend::dx11_fsr3;
+    reason = "pas d'interop DXVK (" + vk::status() + ") : D3D11 natif, ak-fsr-dx11.dll présente";
+  } else {
+    b = backend::none;
+    reason = "pas d'interop DXVK (" + vk::status() + ") et ak-fsr-dx11.dll absente ou invalide";
+  }
+  g_backend = b;
+  reshade::log::message(b == backend::none ? reshade::log::level::error : reshade::log::level::info,
+                        (std::string("AK-FSR: backend : ") + backend_name(b) + " ; " + reason).c_str());
+  perf::event("backend : %s", backend_name(b));
+  return b;
+}
+
+void shutdown_dx11() { dx11::shutdown(); }
+
 bool run(const frame_inputs &in, const settings &requested) {
   if (in.color == nullptr || in.depth == nullptr) return false;
   // M8.5 : exposition fournie -> pas d'auto-exposition (contexte recréé en conséquence).
@@ -559,6 +598,24 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   }
 
   frame_params p;
+  if (g_backend.load() == backend::dx11_fsr3) {
+    // FSR 3.1 DX11 natif : préparation et FSR sur le contexte immédiat, sans Vulkan (AA natif seulement).
+    compute_params(in, s, desc.Width, desc.Height, p);
+    std::string error;
+    const bool ok = dx11::run(in, s, p, desc, error);
+    {
+      std::lock_guard lock(g_info_mutex);
+      if (ok) g_info.provider = "3.1.2 (backend DX11 natif de FidelityFX, portage gameplug-labs)";
+    }
+    if (!ok) {
+      set_fsr_status("backend DX11 : " + error, true);
+      h.last_run_ms = 0;
+      return false;
+    }
+    set_fsr_status(p.have_reproj ? "actif (FSR 3.1 DX11)" : "actif (FSR 3.1 DX11, matrice non inversible : vecteurs nuls)",
+                   false);
+    return true;
+  }
   if (!ready()) return false;
   if (!create_pipeline()) return false;
   const bool scaled = in.render_width != 0 && in.render_height != 0 &&

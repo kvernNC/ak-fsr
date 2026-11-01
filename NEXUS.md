@@ -1,12 +1,14 @@
-# AK-FSR4-Linux-AMD — FSR 4 anti-aliasing for Batman: Arkham Knight (Linux / Proton, AMD only)
+# AK-FSR4-Linux-AMD — FSR 4 anti-aliasing for Batman: Arkham Knight (Linux / Proton + AMD; FSR 3.1 on Windows)
 
 Native-resolution temporal anti-aliasing with **AMD FSR 4** for Batman: Arkham Knight, as a ReShade add-on.
 The game renders at your resolution and FSR 4 replaces the game's SMAA. New in 0.8.0: optional FSR 4 upscaling
-from a lower render resolution.
+from a lower render resolution. New in 0.9.0: **FSR 3.1 on Windows** (native DX11 backend).
 
 ## Read this first
 
-- **Linux (Proton) + AMD Radeon GPU only.** Not Windows, not NVIDIA / Intel.
+- **FSR 4: Linux (Proton) + AMD Radeon GPU only.** Not NVIDIA / Intel.
+- **Windows** (native D3D11, **without DXVK**): **FSR 3.1** with FidelityFX's DX11 backend instead of FSR 4; no
+  model selector, driver watermark or upscaling. New in 0.9.0 and not validated yet: see *Windows* below.
 - **Not compatible with OptiScaler** (crashes). Remove it.
 - Tested on an RX 9070 XT (all four FSR 4 models) and on a Steam Deck OLED with the Lite model forced in the tab
   (about 7.8 ms per frame at 800p: built-in benchmark 43 fps average, 59 without the add-on). RDNA 2 / 3 desktop
@@ -35,6 +37,19 @@ from a lower render resolution.
 4. In `ReShade.ini` (same folder), set `AddonPath=.\` under `[ADDON]`.
 5. Start the game, open the ReShade overlay → **AK-FSR4-Linux-AMD** tab.
 6. Turn off ReShade's own AA effects (SMAA, FXAA): they would apply on top of FSR and the UI.
+
+## Windows (FSR 3.1 DX11)
+
+1. Install ReShade 6.7.3+ **with add-on support** as **`dxgi.dll` in `Binaries/Win64`**. **Do not install DXVK**.
+2. Copy the archive's `Binaries/Win64/` content into the game's `Binaries/Win64/`. `amdvkffx64.dll` is not needed.
+3. The Microsoft Visual C++ 2015–2022 Redistributable (x64) must be installed (usually already there).
+4. Same in-game options: **Anti-Aliasing On**, **Motion Blur On**.
+
+The tab shows the backend in use (`FSR 3.1 (DX11 natif)`).
+
+**FSR 4 on Windows: help wanted.** On Windows, ReShade cannot sit on the game's D3D11 with DXVK under it (on Linux,
+Proton makes that possible), so the add-on would need a native D3D11 ↔ Vulkan bridge (NT-handle shared textures,
+`VK_KHR_external_memory_win32`, shared fence as a timeline semaphore). Details in the source repository's README.
 
 ## The tab
 
@@ -70,12 +85,14 @@ rewrites those shaders in memory when the game creates them. Game files are not 
 | File | What | Licence |
 |---|---|---|
 | `ak-fsr4-linux-amd.addon64` | the add-on | MIT |
-| `ak-fsr4-linux-amd/amd_fidelityfx_*_vk.dll` | AMD FidelityFX SDK 2.3 signed DLLs, renamed | MIT (AMD) |
+| `ak-fsr4-linux-amd/amd_fidelityfx_*_vk.dll` | AMD FidelityFX SDK 2.3 signed DLLs, renamed (FSR 4, Linux) | MIT (AMD) |
+| `ak-fsr-dx11.dll` | bridge to FidelityFX's DX11 backend (FSR 3.1, Windows) | MIT |
+| `ffx_backend_dx11_x64.dll`, `ffx_fsr3upscaler_x64.dll` | FidelityFX FSR 3.1.2 DX11 backend, gameplug-labs build | MIT (AMD, gameplug-labs) |
 
 Not included: `amdvkffx64.dll` (AMD proprietary driver file).
 
 ## Credits
 
-ReShade (crosire), AMD FidelityFX SDK, DXVK, Luma Framework (Filippo Tarpini and contributors: ideas), RenoDX
-(clshortfuse). Method inspired by the "Native DLSS Anti Aliasing for Arkham Knight" mod (Zorkanne33); no code or
+ReShade (crosire), AMD FidelityFX SDK, gameplug-labs (FSR 3.1.2 DX11 backend build), DXVK, Luma Framework (Filippo
+Tarpini and contributors: ideas, FidelityFX DX11 headers), RenoDX (clshortfuse). Method inspired by the "Native DLSS Anti Aliasing for Arkham Knight" mod (Zorkanne33); no code or
 files from it. Source code (MIT): https://github.com/kvernNC/ak-fsr

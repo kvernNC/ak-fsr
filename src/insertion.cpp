@@ -30,6 +30,7 @@ void on_destroy_device(device *) {
   rain::shutdown();
   exposure::shutdown();
   perf::release_device_objects();
+  fsr::shutdown_dx11();
   vk::shutdown();
 }
 
@@ -116,16 +117,11 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
   }
 
   device *dev = cmd->get_device();
-  if (!vk::init(reinterpret_cast<ID3D11Device *>(dev->get_native()))) {
-    if (!g_logged_failure.exchange(true)) {
-      reshade::log::message(reshade::log::level::error, ("AK-FSR: interop Vulkan indisponible : " + vk::status()).c_str());
-    }
+  // Backend choisi une fois : FSR 4 Vulkan (interop DXVK) ou FSR 3.1 DX11 natif (Windows), journalisé avec sa raison.
+  const fsr::backend be = fsr::select_backend(reinterpret_cast<ID3D11Device *>(dev->get_native()));
+  if (be == fsr::backend::none) {
+    jitter::set_enabled(false);
     return false;
-  }
-  static bool logged_ready = false;
-  if (!logged_ready) {
-    logged_ready = true;
-    reshade::log::message(reshade::log::level::info, ("AK-FSR: interop Vulkan " + vk::status()).c_str());
   }
 
   auto *color = reinterpret_cast<ID3D11Resource *>(scene_color.handle);
@@ -176,6 +172,7 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
     return ok;
   }
 
+  if (be != fsr::backend::vulkan_fsr4) return false;  // tests d'interop : chemin Vulkan seulement
   const auto test = m == mode::mirror_half ? vk::test_mode::mirror_half : vk::test_mode::roundtrip;
   if (!vk::run_test(color, test) && !g_logged_failure.exchange(true)) {
     reshade::log::message(reshade::log::level::error, ("AK-FSR: test interop en échec : " + vk::status()).c_str());
@@ -185,12 +182,18 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
 
 bool fsr_active() { return !g_bypass.load(std::memory_order_relaxed) && g_mode.load(std::memory_order_relaxed) == mode::fsr; }
 
-bool upscale_active() { return fsr_active() && get_fsr_settings().upscale && !passes::upscale_unsupported(); }
+bool upscale_active() {
+  // Upscaling : FSR 4 Vulkan seulement (le backend DX11 ne fait que l'AA natif).
+  return fsr_active() && get_fsr_settings().upscale && !passes::upscale_unsupported() &&
+         fsr::current_backend() != fsr::backend::dx11_fsr3;
+}
 
 bool before_upscale(command_list *cmd, resource color, resource depth, resource velocity, const fsr::view_data *view_cb,
                     uint32_t render_w, uint32_t render_h) {
   if (!upscale_active() || color.handle == 0 || depth.handle == 0 || view_cb == nullptr) return false;
-  if (!vk::init(reinterpret_cast<ID3D11Device *>(cmd->get_device()->get_native()))) return false;
+  if (fsr::select_backend(reinterpret_cast<ID3D11Device *>(cmd->get_device()->get_native())) !=
+      fsr::backend::vulkan_fsr4)
+    return false;
   jitter::set_enabled(get_fsr_settings().jitter);
   fsr::frame_inputs in;
   in.color = reinterpret_cast<ID3D11Resource *>(color.handle);

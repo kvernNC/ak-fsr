@@ -9,6 +9,7 @@
 #include <string>
 
 struct ID3D11Resource;
+struct ID3D11Device;
 
 namespace akfsr::fsr {
 
@@ -75,6 +76,16 @@ struct frame_inputs {
 };
 
 bool run(const frame_inputs &in, const settings &s);
+
+// Backend, choisi une fois au premier passage (journalisé avec sa raison) :
+// - FSR 4 Vulkan : le device D3D11 répond à l'interop de DXVK (Linux / Proton), provider FSR 4 du pilote AMD ;
+// - FSR 3.1 DX11 : D3D11 natif (Windows sans DXVK), ak-fsr-dx11.dll et le backend DX11 de FidelityFX à côté de l'addon ;
+// - aucun : ni l'un ni l'autre (l'image du jeu reste intacte).
+enum class backend : int { undecided = 0, vulkan_fsr4, dx11_fsr3, none };
+backend select_backend(ID3D11Device *native_device);
+backend current_backend();
+const char *backend_name(backend b);
+void shutdown_dx11();  // destruction du device
 
 struct info {
   std::string status;

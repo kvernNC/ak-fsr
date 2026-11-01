@@ -1,13 +1,14 @@
 # AK-FSR4-Linux-AMD
 
-**AMD FSR 4 anti-aliasing for Batman: Arkham Knight, on Linux / Proton with an AMD GPU.**
+**AMD FSR 4 anti-aliasing for Batman: Arkham Knight, on Linux / Proton with an AMD GPU (FSR 3.1 on Windows).**
 
 A [ReShade](https://reshade.me) add-on that replaces the game's SMAA with FSR 4 as native-resolution temporal
 anti-aliasing: the game renders at your resolution, FSR 4 removes aliasing and shimmering. Optionally, the game can
 render at a lower resolution and FSR 4 upscales it (see *Render resolution* below).
 
-> **Linux (Proton) + AMD Radeon only.** The add-on talks to FSR 4 through DXVK's Vulkan interop and AMD's FSR 4
-> driver library. It does not work on Windows, nor on NVIDIA / Intel GPUs.
+> **FSR 4: Linux (Proton) + AMD Radeon only.** The add-on talks to FSR 4 through DXVK's Vulkan interop and AMD's
+> FSR 4 driver library. **On Windows** (native D3D11, no DXVK), it falls back to **FSR 3.1** with FidelityFX's
+> native DX11 backend (new in 0.9.0, see *Windows* below).
 >
 > Personal, experimental project. Tested with the Steam version 1.6.2.0 of the game on an RX 9070 XT
 > (CachyOS, Mesa RADV) and on a Steam Deck OLED (SteamOS, Lite model).
@@ -53,8 +54,9 @@ HDR back buffer), upscaling is disabled for the session and the game upscales by
 | Linux, AMD RDNA 4 (RX 9000), Proton | **tested** (RX 9070 XT, all four models) |
 | Linux, AMD RDNA 2 / 3, Proton | should work (INT8 / INT8-2), not tested |
 | Steam Deck (SteamOS) | **tested** with the Lite model forced in the tab (`FSR4L-i8`): about 7.8 ms per frame at 800p, built-in benchmark 43 fps average (59 without the add-on) |
-| Windows | **not supported** |
-| NVIDIA / Intel | **not supported** |
+| Windows (native D3D11, no DXVK) | **FSR 3.1 (DX11)**, new in 0.9.0, not validated yet |
+| Windows with DXVK | not supported (see *Windows: FSR 4 help wanted*) |
+| NVIDIA / Intel on Linux | not supported (FSR 4 needs AMD's driver library) |
 
 ## Requirements
 
@@ -84,6 +86,35 @@ HDR back buffer), upscaling is disabled for the session and the game upscales by
 
 Settings are saved in `ReShade.ini`, section `[AK-FSR]`.
 
+## Windows (FSR 3.1 DX11)
+
+On Windows the add-on cannot reach FSR 4 (see below) and uses **FSR 3.1** instead, with FidelityFX's native DX11
+backend: native-resolution AA in place of the game's SMAA, with the same jitter, shader fixes, motion vectors, rain
+and LOD bias as on Linux. The FSR 4 model selector, the driver watermark and the render resolution (upscaling) are
+FSR 4 features and are not available there. The tab shows the backend in use.
+
+1. Install [ReShade](https://reshade.me) 6.7.3+ **with add-on support** for the game, as **`dxgi.dll` in
+   `Binaries/Win64`**. **Do not install DXVK** (its `d3d11.dll` / `dxgi.dll` would hide the game's D3D11 from
+   ReShade).
+2. Copy the archive's `Binaries/Win64/` content into the game's `Binaries/Win64/`: `ak-fsr4-linux-amd.addon64`,
+   `ak-fsr-dx11.dll`, `ffx_backend_dx11_x64.dll`, `ffx_fsr3upscaler_x64.dll`. `amdvkffx64.dll` is not needed.
+3. The [Microsoft Visual C++ 2015–2022 Redistributable (x64)](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)
+   must be installed (usually already there).
+4. Same in-game options as on Linux: **Anti-Aliasing On**, **Motion Blur On**.
+5. In `ReShade.log`, the add-on writes the chosen backend: `backend : FSR 3.1 (DX11 natif)`.
+
+## Windows: FSR 4 help wanted
+
+FSR 4 on Windows needs a bridge the add-on does not have. On Linux, Proton puts DXVK in the prefix's `system32`, so
+ReShade (as `dxgi.dll`) sits **above** DXVK: it sees the game's D3D11 and DXVK's Vulkan interop is available. On
+Windows you cannot have ReShade on D3D11 and DXVK under it: ReShade hooks `system32\d3d11.dll` while the game loads
+DXVK's `d3d11.dll`, so ReShade falls back to DXVK's Vulkan and the add-on only sees SPIR-V (no game pass is found);
+replacing DXVK's `dxgi.dll` with ReShade's crashes.
+
+The missing piece is a native D3D11 ↔ Vulkan bridge: textures shared with `D3D11_RESOURCE_MISC_SHARED_NTHANDLE` and
+imported with `VK_KHR_external_memory_win32`, plus a shared D3D11 fence imported as a Vulkan timeline semaphore
+(`VK_KHR_external_semaphore_win32`) for ordering, then FSR 4 on AMD's Windows Vulkan driver. Contributions welcome.
+
 ## How it works
 
 - **Jitter**: `FPerspectiveMatrix` (Unreal Engine 3) is hooked in `BatmanAK.exe` (found by byte pattern) and a
@@ -111,6 +142,8 @@ Cross-compiled for Windows x64 with `clang-cl`, `lld-link` and the MSVC SDK/CRT 
 git clone --recurse-submodules https://github.com/kvernNC/ak-fsr
 xwin --accept-license --cache-dir ~/.xwin-cache splat --output ~/.xwin
 scripts/fetch_ffx_signed.sh      # AMD's signed FidelityFX SDK 2.3 DLLs (official repo, hashes checked)
+scripts/fetch_ffx_dx11.sh        # FidelityFX DX11 headers (via Luma, pinned commit, hashes checked)
+scripts/fetch_ffx_dx11_gameplug.sh  # FSR 3.1.2 DX11 backend DLLs (gameplug-labs release, hash checked)
 cmake -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/clang-cl-xwin.cmake -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 scripts/deploy.sh                # copies into the game folder (set AK_GAME_DIR to change it)
@@ -132,9 +165,12 @@ profiles, remote commands, engine commands, screenshots, frame and texture captu
 - Add-on code: [MIT](LICENSE).
 - [ReShade](https://github.com/crosire/reshade) (crosire): add-on API, BSD-3-Clause.
 - [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (AMD): FSR, MIT.
+- [gameplug-labs/FidelityFX-SDK](https://github.com/gameplug-labs/FidelityFX-SDK) (MIT): FSR 3.1.2 DX11 backend
+  DLLs used on Windows (release `fsr3-v3.1.2`, hash-checked by `scripts/fetch_ffx_dx11_gameplug.sh`).
 - [DXVK](https://github.com/doitsujin/dxvk): Vulkan interop interfaces, zlib.
 - [Luma Framework](https://github.com/Filoppi/Luma-Framework) (Filippo Tarpini and contributors, MIT): ideas
-  (SMAA replacement, LOD bias).
+  (SMAA replacement, LOD bias) and the FidelityFX DX11 headers used to build `ak-fsr-dx11.dll`
+  (`scripts/fetch_ffx_dx11.sh`).
 - [OptiScaler](https://github.com/optiscaler/OptiScaler) and
   [FSR4-Vulkan-Bridge](https://github.com/SemiRealProductions/FSR4-Vulkan-Bridge): interface facts about AMD's
   FSR 4 driver provider; no code taken.

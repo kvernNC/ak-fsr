@@ -3,7 +3,7 @@
 Ce fichier est le cahier des charges du projet. Il est fait pour être placé à la racine du dépôt
 (ou copié dans `CLAUDE.md`) et lu par l'agent de code avant de commencer.
 
-Dernière mise à jour : 01/11/2026 (version de l'addon : 0.8.0, jalon M13 clos).
+Dernière mise à jour : 01/11/2026 (version de l'addon : 0.9.0, FSR 3.1 DX11 pour Windows).
 
 ## 1. Objectif
 
@@ -274,6 +274,17 @@ Ne pas passer au suivant sans validation.
      « performance » (≈ 5 ms de moins), ou cap à 40 fps / 80 Hz avec lsfg-vk.
      Acquis de M13 : mesures (`[Debug] FrameLog`), commandes du moteur (`ue3`), `texshot`, `cbset`, correction de
      l'origine de vue à ScreenPercentage < 100.
+
+- **M14 — Windows (0.9.0, 01/11/2026)** : sous Windows, DXVK et ReShade ne se combinent pas (ReShade accroche
+  `system32\d3d11.dll` alors que le jeu charge le `d3d11.dll` de DXVK : ReShade retombe sur le Vulkan de DXVK, l'addon ne
+  voit que du SPIR-V et ne trouve aucune passe ; remplacer le `dxgi.dll` de DXVK par celui de ReShade plante). Testé sur
+  RX 9070 XT, pilote AMD 2.0.416, DXVK 3.1.1, ReShade 6.8.0 global. FSR 4 demanderait un pont D3D11 ↔ Vulkan natif
+  (textures NT partagées + `VK_KHR_external_memory_win32`, fence partagée importée en sémaphore timeline) : hors
+  périmètre, « help wanted » dans le README. Décision : **backend FSR 3.1 DX11 natif rétabli** (`fsr_dx11.cpp`,
+  `ak-fsr-dx11.dll`, portage gameplug-labs fsr3-v3.1.2, MIT), choisi automatiquement quand le device D3D11 ne répond pas
+  à l'interop DXVK ; chemin FSR 4 Linux inchangé. À valider sous Windows : `Redirecting D3D11CreateDevice` dans le log,
+  `backend : FSR 3.1 (DX11 natif)`, contexte FSR 3 créé ; benchmark 1440p comparé à la référence mod DLAA + OptiScaler +
+  FSR 4 FP8 (116 / 80 / 144 fps de moyenne / min / max, sans limiteur).
 
 ## 8. FSR 4 (notes)
 
