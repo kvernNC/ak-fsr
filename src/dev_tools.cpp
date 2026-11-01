@@ -26,6 +26,7 @@
 #include "passes.hpp"
 #include "screenshot.hpp"
 #include "shader_explorer.hpp"
+#include "texshot.hpp"
 #include "ue3_exec.hpp"
 #include "vk_bridge.hpp"
 #include "vk_device_hook.hpp"
@@ -237,6 +238,10 @@ void next_test_profile() {
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
 //   ue3 <commande>    commande du moteur exécutée sur le thread de jeu (ex. ue3 scale set ScreenPercentage 67,
 //                     ue3 scale dump) ; réponses du moteur dans ReShade.log (« [ue3] moteur : … »)
+//   texshot <cs> <t0..t7|u0|u1|handle> <nom> [after]  texture copiée avant le dispatch du CS <cs> (hexadécimal), ou à
+//                     la commande suivante avec « after », écrite dans ak-fsr-shots/<nom>.png au present
+//   cbset cs|ps <hash> <slot> <reg> <comp> <valeur>  constante forcée (copie du CB) à chaque dispatch / draw ;
+//                     cbclear : tout retirer
 //   screenshot <nom> [n]  capture PNG du back buffer dans ak-fsr-shots/<nom>.png, ou n frames consécutives
 //                         (<nom>_0.png …, n ≤ 16) pour juger le scintillement
 int g_shader_dump_in = 0;  // frames avant l'écriture de ak-fsr-shaders.txt (0 : rien)
@@ -300,7 +305,25 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     cmd = line.substr(0, sp);
     arg = line.substr(sp + 1);
   }
-  if (cmd == "ue3") {
+  if (cmd == "texshot") {
+    char hash[32] = {}, target[32] = {}, name[96] = {}, after[16] = {};
+    if (std::sscanf(arg.c_str(), "%31s %31s %95s %15s", hash, target, name, after) >= 3)
+      akfsr::texshot::request(static_cast<uint32_t>(std::strtoul(hash, nullptr, 16)), target, name,
+                              std::string(after) == "after");
+    else
+      log_fmt(reshade::log::level::warning, "AK-FSR: texshot : syntaxe « texshot <cs> <cible> <nom> [after] »");
+  } else if (cmd == "cbset") {  // cbset cs|ps <hash> <slot> <reg> <comp 0..3> <valeur>
+    char stage[8] = {}, hash[32] = {};
+    unsigned slot = 0, reg = 0, comp = 0;
+    float value = 0;
+    if (std::sscanf(arg.c_str(), "%7s %31s %u %u %u %f", stage, hash, &slot, &reg, &comp, &value) == 6 && comp < 4)
+      akfsr::texshot::set_override(std::string(stage) == "ps", static_cast<uint32_t>(std::strtoul(hash, nullptr, 16)),
+                                   slot, reg, comp, value);
+    else
+      log_fmt(reshade::log::level::warning, "AK-FSR: cbset : syntaxe « cbset cs|ps <hash> <slot> <reg> <comp> <valeur> »");
+  } else if (cmd == "cbclear") {
+    akfsr::texshot::clear_overrides();
+  } else if (cmd == "ue3") {
     akfsr::ue3::post(static_cast<HWND>(runtime->get_hwnd()), arg);
   } else if (cmd == "report") {
     write_report();
@@ -473,6 +496,9 @@ void set_swapchain(uint32_t width, uint32_t height, reshade::api::format format)
 }
 
 void on_present(reshade::api::effect_runtime *runtime) {
+  akfsr::texshot::on_present(
+      reinterpret_cast<ID3D11DeviceContext *>(runtime->get_command_queue()->get_immediate_command_list()->get_native()),
+      g_addon_dir / "ak-fsr-shots");
   static bool ue3_described = false;  // diagnostic des commandes du moteur, une fois (recherche ~0,3 s)
   if (!ue3_described) {
     ue3_described = true;

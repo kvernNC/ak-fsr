@@ -13,6 +13,9 @@
 #include "rain.hpp"
 #include "shader_explorer.hpp"
 #include "shader_patch.hpp"
+#if AKFSR_DEV_TOOLS
+#include "texshot.hpp"
+#endif
 
 using namespace reshade::api;
 
@@ -151,6 +154,9 @@ bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t 
     explorer::on_deferred_draw();
     return false;
   }
+#if AKFSR_DEV_TOOLS
+  texshot::on_draw(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), g_ps.hash);
+#endif
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
   if (!hidden && redirect_translucent(cmd, {false, vertices, instances, first_vertex, first_instance, 0})) return true;
@@ -168,6 +174,9 @@ bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, ui
     explorer::on_deferred_draw();
     return false;
   }
+#if AKFSR_DEV_TOOLS
+  texshot::on_draw(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), g_ps.hash);
+#endif
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
   if (!hidden && redirect_translucent(cmd, {true, indices, instances, first_index, first_instance, vertex_offset}))
@@ -341,6 +350,10 @@ void note_exposure(device *dev) {
 
 bool on_dispatch(command_list *cmd, uint32_t, uint32_t, uint32_t) {
   if (!is_immediate(cmd)) return false;
+#if AKFSR_DEV_TOOLS
+  texshot::on_dispatch(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), g_cs.hash, g_cs.srv.data(),
+                       g_cs.srv.size(), g_cs.uav.data(), g_cs.uav.size());
+#endif
   if (explorer::on_dispatch(g_cs.hash)) return true;  // diagnostic : dispatch masqué
   if (g_cs.hash == 0) return false;
   device *dev = cmd->get_device();
