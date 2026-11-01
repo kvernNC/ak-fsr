@@ -156,7 +156,7 @@ bool skip_smaa_draw() {
 }
 
 void bind_jitter_cb(device *dev, command_list *cmd, bool pixel_shader);  // M6, voir plus bas
-void upscale_before_draw(command_list *cmd);                             // M9, voir plus bas
+bool upscale_before_draw(command_list *cmd);                             // M9, voir plus bas
 void restore_vs_view_cb(ID3D11DeviceContext *ctx);
 
 bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t first_vertex, uint32_t first_instance) {
@@ -168,7 +168,7 @@ bool on_draw(command_list *cmd, uint32_t vertices, uint32_t instances, uint32_t 
   texshot::on_draw(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), g_ps.hash);
 #endif
   restore_vs_view_cb(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()));
-  if (g_ps.hash == kUpscalePs) upscale_before_draw(cmd);
+  if (g_ps.hash == kUpscalePs && upscale_before_draw(cmd)) return true;  // M9 : draw remplacé par une copie
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, vertices * instances);
   if (!hidden && redirect_translucent(cmd, {false, vertices, instances, first_vertex, first_instance, 0})) return true;
@@ -190,7 +190,7 @@ bool on_draw_indexed(command_list *cmd, uint32_t indices, uint32_t instances, ui
   texshot::on_draw(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()), g_ps.hash);
 #endif
   restore_vs_view_cb(reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native()));
-  if (g_ps.hash == kUpscalePs) upscale_before_draw(cmd);
+  if (g_ps.hash == kUpscalePs && upscale_before_draw(cmd)) return true;  // M9 : draw remplacé par une copie
   if (shader_patch::needs_jitter_cb(g_ps.hash)) bind_jitter_cb(cmd->get_device(), cmd, true);
   const bool hidden = explorer::on_draw(g_ps.hash, indices * instances);
   if (!hidden && redirect_translucent(cmd, {true, indices, instances, first_index, first_instance, vertex_offset}))
@@ -287,6 +287,10 @@ ID3D11Buffer *g_vs_view_cb = nullptr;       // notre copie du CB View (taille du
 fsr::view_data g_scene_view{};              // CB View figé à la passe de vélocité (vue de la scène de cette frame)
 bool g_scene_view_valid = false;
 ID3D11Buffer *g_vs_view_original = nullptr; // CB du jeu à remettre à la commande suivante
+ID3D11Buffer *g_vs_b0 = nullptr, *g_vs_b0_original = nullptr;  // variantes 1 / 2 : CB b0 du VS modifié
+// Variante de raccordement (outils de dev « upscalefix ») : 0 CB View du VS ; 1 + VS b0 c6.xy = 1 / rendu ;
+// 2 + VS b0 c6 = (1 / rendu, rendu) ; 3 draw sauté, sortie de FSR copiée dans la cible du draw (back buffer).
+std::atomic<int> g_upscale_fix{3};
 
 bool render_scaled_now() {
   const uint32_t rw = g_render_w.load(std::memory_order_relaxed), bw = g_buffer_w.load(std::memory_order_relaxed);
@@ -295,6 +299,14 @@ bool render_scaled_now() {
 }
 
 void restore_vs_view_cb(ID3D11DeviceContext *ctx) {
+  if (g_vs_b0_original != nullptr) {
+    ID3D11Buffer *now = nullptr;
+    ctx->VSGetConstantBuffers(0, 1, &now);
+    if (now == g_vs_b0) ctx->VSSetConstantBuffers(0, 1, &g_vs_b0_original);
+    if (now != nullptr) now->Release();
+    g_vs_b0_original->Release();
+    g_vs_b0_original = nullptr;
+  }
   if (g_vs_view_original == nullptr) return;
   ID3D11Buffer *now = nullptr;
   ctx->VSGetConstantBuffers(1, 1, &now);
@@ -304,28 +316,81 @@ void restore_vs_view_cb(ID3D11DeviceContext *ctx) {
   g_vs_view_original = nullptr;
 }
 
-void upscale_before_draw(command_list *cmd) {
-  if (g_current.upscaled || !insertion::upscale_active() || !render_scaled_now()) return;
+// Variante 1 / 2 : copie du CB b0 du VS (lecture CPU, diagnostic) avec c6 modifié.
+void override_vs_b0(ID3D11DeviceContext *ctx, uint32_t rw, uint32_t rh, bool with_size) {
+  ID3D11Buffer *orig = nullptr;
+  ctx->VSGetConstantBuffers(0, 1, &orig);
+  if (orig == nullptr) return;
+  D3D11_BUFFER_DESC d;
+  orig->GetDesc(&d);
+  if (d.ByteWidth < 112 || d.ByteWidth > 4096) {
+    orig->Release();
+    return;
+  }
+  ID3D11Device *dev = nullptr;
+  ctx->GetDevice(&dev);
+  D3D11_BUFFER_DESC sd{d.ByteWidth, D3D11_USAGE_STAGING, 0, D3D11_CPU_ACCESS_READ, 0, 0};
+  ID3D11Buffer *staging = nullptr;
+  dev->CreateBuffer(&sd, nullptr, &staging);
+  if (g_vs_b0 != nullptr) {
+    D3D11_BUFFER_DESC cur;
+    g_vs_b0->GetDesc(&cur);
+    if (cur.ByteWidth != d.ByteWidth) {
+      g_vs_b0->Release();
+      g_vs_b0 = nullptr;
+    }
+  }
+  if (g_vs_b0 == nullptr) {
+    D3D11_BUFFER_DESC od{d.ByteWidth, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0};
+    dev->CreateBuffer(&od, nullptr, &g_vs_b0);
+  }
+  dev->Release();
+  if (staging == nullptr || g_vs_b0 == nullptr) {
+    if (staging) staging->Release();
+    orig->Release();
+    return;
+  }
+  ctx->CopyResource(staging, orig);
+  std::vector<float> data(d.ByteWidth / 4);
+  D3D11_MAPPED_SUBRESOURCE m;
+  if (SUCCEEDED(ctx->Map(staging, 0, D3D11_MAP_READ, 0, &m))) {
+    std::memcpy(data.data(), m.pData, d.ByteWidth);
+    ctx->Unmap(staging, 0);
+  }
+  staging->Release();
+  data[24] = 1.0f / static_cast<float>(rw);
+  data[25] = 1.0f / static_cast<float>(rh);
+  if (with_size) {
+    data[26] = static_cast<float>(rw);
+    data[27] = static_cast<float>(rh);
+  }
+  ctx->UpdateSubresource(g_vs_b0, 0, nullptr, data.data(), 0, 0);
+  g_vs_b0_original = orig;
+  ctx->VSSetConstantBuffers(0, 1, &g_vs_b0);
+}
+
+bool upscale_before_draw(command_list *cmd) {
+  if (g_current.upscaled || !insertion::upscale_active() || !render_scaled_now()) return false;
   auto *ctx = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
   const uint32_t bw = g_buffer_w.load(), bh = g_buffer_h.load(), rw = g_render_w.load(), rh = g_render_h.load();
   // Entrée : t0 du PS, de la taille du buffer (sinon ce n'est pas l'agrandissement final).
   ID3D11ShaderResourceView *srv = nullptr;
   ctx->PSGetShaderResources(0, 1, &srv);
-  if (srv == nullptr) return;
+  if (srv == nullptr) return false;
   ID3D11Resource *res = nullptr;
   srv->GetResource(&res);
   srv->Release();
   ID3D11Texture2D *tex = nullptr;
   if (res == nullptr || FAILED(res->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&tex)))) {
     if (res != nullptr) res->Release();
-    return;
+    return false;
   }
   D3D11_TEXTURE2D_DESC d;
   tex->GetDesc(&d);
   tex->Release();
   if (d.Width != bw || d.Height != bh) {
     res->Release();
-    return;
+    return false;
   }
   uint64_t depth = 0;
   fsr::view_data view{};
@@ -340,9 +405,43 @@ void upscale_before_draw(command_list *cmd) {
   const uint64_t velocity = previous_velocity();
   const bool ok = depth != 0 && insertion::before_upscale(cmd, resource{reinterpret_cast<uint64_t>(res)},
                                                           resource{depth}, resource{velocity}, &view, rw, rh);
-  res->Release();
+  ID3D11Resource *color_res = res;  // gardée pour la copie (variante 3)
+  struct releaser {
+    ID3D11Resource *r;
+    ~releaser() { r->Release(); }
+  } keep{color_res};
   g_current.upscaled = true;  // une seule tentative par frame
-  if (!ok) return;
+  if (!ok) return false;
+  const int fix = g_upscale_fix.load();
+  if (fix == 3) {
+    // Sortie de FSR (toute la texture) copiée dans la cible du draw, qui est sauté.
+    ID3D11RenderTargetView *rtv = nullptr;
+    ctx->OMGetRenderTargets(1, &rtv, nullptr);
+    if (rtv == nullptr) return false;
+    ID3D11Resource *target = nullptr;
+    rtv->GetResource(&target);
+    rtv->Release();
+    ID3D11Texture2D *tt = nullptr;
+    bool copied = false;
+    if (target != nullptr && SUCCEEDED(target->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void **>(&tt)))) {
+      D3D11_TEXTURE2D_DESC td;
+      tt->GetDesc(&td);
+      tt->Release();
+      if (td.Width == d.Width && td.Height == d.Height && td.Format == d.Format) {
+        ctx->CopyResource(target, color_res);
+        copied = true;
+      }
+    }
+    if (target != nullptr) target->Release();
+    static bool logged = false;
+    if (!logged) {
+      logged = true;
+      reshade::log::message(copied ? reshade::log::level::info : reshade::log::level::warning,
+                            copied ? "AK-FSR: M9 : agrandissement du moteur remplacé par la sortie de FSR (copie)"
+                                   : "AK-FSR: M9 : cible de l'agrandissement incompatible (taille / format) : copie impossible");
+    }
+    return copied;
+  }
   // CB View du draw : zone de rendu = texture entière.
   std::array<float, kViewCbSize / 4> cb;
   {
@@ -358,11 +457,13 @@ void upscale_before_draw(command_list *cmd) {
     D3D11_BUFFER_DESC bd{kViewCbSize, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0};
     dev->CreateBuffer(&bd, nullptr, &g_vs_view_cb);
     dev->Release();
-    if (g_vs_view_cb == nullptr) return;
+    if (g_vs_view_cb == nullptr) return false;
   }
   ctx->UpdateSubresource(g_vs_view_cb, 0, nullptr, cb.data(), 0, 0);
   ctx->VSGetConstantBuffers(1, 1, &g_vs_view_original);
   ctx->VSSetConstantBuffers(1, 1, &g_vs_view_cb);
+  if (fix == 1 || fix == 2) override_vs_b0(ctx, rw, rh, fix == 2);
+  return false;
 }
 
 // M8.1 : FSR à la place de SMAANeighborhoodBlending (t0 couleur linéaire -> u0). true : dispatch sauté.
@@ -674,6 +775,7 @@ void on_present(command_queue *queue, swapchain *, const rect *, const rect *, u
 
 void set_shader_patches_enabled(bool enabled) { g_patches_enabled = enabled; }
 bool render_scaled() { return render_scaled_now(); }
+void set_upscale_fix(int variant) { g_upscale_fix = variant; }
 void render_size(uint32_t &width, uint32_t &height) {
   width = g_render_w.load();
   height = g_render_h.load();

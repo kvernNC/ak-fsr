@@ -362,6 +362,8 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
     auto s = akfsr::insertion::get_fsr_settings();
     s.upscale = std::atoi(arg.c_str()) != 0;
     akfsr::insertion::set_fsr_settings(s);
+  } else if (cmd == "upscalefix") {  // M9 : raccordement 0..3 (voir passes.cpp)
+    akfsr::passes::set_upscale_fix(std::atoi(arg.c_str()));
   } else if (cmd == "watermark") {  // watermark du pilote FSR 4 : 0 / 1
     auto s = akfsr::insertion::get_fsr_settings();
     s.fsr4_watermark = std::atoi(arg.c_str()) != 0;
