@@ -1,7 +1,7 @@
 #pragma once
 
 #define AKFSR_VERSION_MAJOR 0
-#define AKFSR_VERSION_MINOR 7
+#define AKFSR_VERSION_MINOR 8
 #define AKFSR_VERSION_PATCH 0
 
 #define AKFSR_STR2(x) #x

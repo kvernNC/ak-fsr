@@ -3,7 +3,7 @@
 Ce fichier est le cahier des charges du projet. Il est fait pour être placé à la racine du dépôt
 (ou copié dans `CLAUDE.md`) et lu par l'agent de code avant de commencer.
 
-Dernière mise à jour : 27/10/2026 (version de l'addon : 0.6.3, jalon M5).
+Dernière mise à jour : 01/11/2026 (version de l'addon : 0.8.0, jalon M13 clos).
 
 ## 1. Objectif
 
