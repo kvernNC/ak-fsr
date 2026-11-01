@@ -166,6 +166,30 @@ Ne pas passer au suivant sans validation.
   `ScreenPercentage=80` (et `UpscaleScreenPercentage=True`) dans `BmSystemSettings.ini` : 3D plus douce,
   UI nette, fps en hausse. Si oui, faire rendre FSR de la résolution réduite vers la native à la place
   de l'agrandissement du moteur.
+- **M9 relancé (01/11/2026) — ScreenPercentage à chaud, diagnostic** (outils de dev : `ue3`, `texshot`, `cbset`).
+  - **Contrôle du moteur** : `ue3 scale set ScreenPercentage 67` (USystemSettings::Exec appelé par l'addon sur le
+    thread de jeu, voir `src/ue3_exec.cpp`) ; changement pris en compte sans relancer. Jeu seul à 67 % : 90 fps (plafond)
+    au lieu d'environ 59 à 100 %.
+  - **Cause du rendu cassé** : la scène (G-buffer, accumulation de lumière) est rendue en haut à gauche du buffer
+    1280×800 (vue 857×535), mais le moteur donne au post-traitement une origine de vue **centrée** :
+    ((1280-857)/2, (800-535)/2) = (211, 132), dans les constantes b0 de nombreuses passes (ligne « taille.xy,
+    origine.zw », registre c6 / c7 / c8 / c11 / c12 selon le shader). Constantes de vue correctes, elles (View CB c19 ≈
+    0,335, c22 = 857×535, c23 = 1280×800).
+  - **Vérifié à chaud** : origine forcée à (0, 0) (`cbset cs <hash> 0 11 2 0` et `… 11 3 0`) dans la composition de
+    l'éclairage `0xFE8D7315` / `0x816CB5D7` → coupure de brouillard / éclairage disparue, image correcte à 67 %
+    (profondeur de champ coupée). Passes qui reçoivent (211, 132) : `0x816CB5D7`, `0xFE8D7315` (c11), `0xA124DE12`
+    (c12), chaîne de flou / DoF `0x0E6435F4`, `0x2B46745A` et `0x26C26A50`, `0x65FE6DB3`, `0x6F9D46E3`, `0x983D7D7F`,
+    `0xAE739EF7`, `0xB029C097`, `0xB42A7F40`, `0xCA507609` (c6), `0x0EF4130E`, `0x41F457B3`, `0x5A988DD0`,
+    `0x978BFB09`, `0x98C5C8CA`, `0xF98BC308`, PS `0x311E0BDA` (c7), `0xB2A276FD` (c8).
+  - **Reste** : (1) profondeur de champ : avec l'origine forcée à 0 partout, couleurs correctes mais image encore décalée
+    de 1,5 × (211, 132) → une passe DoF prend l'origine ailleurs (à chercher par `texshot` le long de la chaîne DoF) ;
+    (2) sortie de `0xA124DE12` (réflexions ?) répétée horizontalement, sans effet visible sur l'image finale : comparer
+    à 100 % ; (3) correction durable : réécrire l'origine (211, 132) -> (0, 0) dans les CB du jeu quand
+    ScreenPercentage < 100 (à l'unmap / update des CB, ou dans le code moteur qui la calcule), au lieu de `cbset` qui
+    relit chaque CB (lent) ; (4) brancher FSR 4 en upscaling (entrée 857×535 en haut à gauche, sortie 1280×800) à la
+    place de l'agrandissement du moteur (pixelisé).
+  - `UpscaleScreenPercentage=False` ne règle rien : post-traitement centré, scène toujours en haut à gauche.
+
 - **M10 — FSR 4 sans OptiScaler, code MIT** (spécification en §8.1). Ordre :
   1. **M10.0 — Test sans code (PC)** : FSR4-Vulkan-Bridge installé à la main en remplacement de
      `amd_fidelityfx_vk.dll`, avec sa couche Linux en `LD_PRELOAD`. Critère : « 4.1.2 » listée dans
