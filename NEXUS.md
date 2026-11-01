@@ -1,7 +1,8 @@
 # AK-FSR4-Linux-AMD — FSR 4 anti-aliasing for Batman: Arkham Knight (Linux / Proton, AMD only)
 
 Native-resolution temporal anti-aliasing with **AMD FSR 4** for Batman: Arkham Knight, as a ReShade add-on.
-No upscaling: the game renders at your resolution and FSR 4 replaces the game's SMAA.
+The game renders at your resolution and FSR 4 replaces the game's SMAA. New in 0.8.0: optional FSR 4 upscaling
+from a lower render resolution.
 
 ## Read this first
 
@@ -38,6 +39,14 @@ No upscaling: the game renders at your resolution and FSR 4 replaces the game's 
   INT8 Lite (handheld). Any model can be forced to compare quality and cost.
 - **Driver watermark**: AMD's overlay shows the FSR 4 provider really running (`FSR4`, `FSR4-i8`, `FSR4-i8-2`,
   `FSR4L-i8`). Leave it off to play.
+- **Render resolution** (new in 0.8.0): 100 % (native AA, default), 77 % (Ultra Quality), 67 % (Quality), 58 %
+  (Balanced), 50 % (Performance). Below 100 %, the game renders fewer pixels and FSR 4 upscales to your screen
+  resolution; the UI stays at full resolution. Applied immediately, saved by the game. The add-on also fixes the
+  game's broken `ScreenPercentage` image (seams, offset picture).
+  FSR 4's cost depends on the output resolution, so the gain is only what the game saves: none measured on a Steam
+  Deck (the game is not pixel-limited there), more expected on GPU-limited setups (1080p handhelds, desktop GPUs at
+  high resolution; not measured yet). Limits: slight trails on fast-moving characters, FSR works after tone mapping;
+  if the game's final upscale target does not match (e.g. HDR back buffer), upscaling turns itself off.
 
 ## How it handles the game's shaders
 
@@ -48,7 +57,7 @@ rewrites those shaders in memory when the game creates them. Game files are not 
 
 ## Known limitations
 
-- The game's `ScreenPercentage` setting breaks the image (game bug): this add-on does not upscale.
+- FSR 4 upscaling (render resolution below 100 %) is new and only tested on a Steam Deck.
 - Falling rain streaks go through FSR and can look slightly softer (splashes are drawn after FSR).
 - Single-player game, no anti-cheat; still a mod that hooks the renderer: use at your own risk.
 

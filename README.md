@@ -3,7 +3,8 @@
 **AMD FSR 4 anti-aliasing for Batman: Arkham Knight, on Linux / Proton with an AMD GPU.**
 
 A [ReShade](https://reshade.me) add-on that replaces the game's SMAA with FSR 4 as native-resolution temporal
-anti-aliasing (no upscaling): the game renders at your resolution, FSR 4 removes aliasing and shimmering.
+anti-aliasing: the game renders at your resolution, FSR 4 removes aliasing and shimmering. Optionally, the game can
+render at a lower resolution and FSR 4 upscales it (see *Render resolution* below).
 
 > **Linux (Proton) + AMD Radeon only.** The add-on talks to FSR 4 through DXVK's Vulkan interop and AMD's FSR 4
 > driver library. It does not work on Windows, nor on NVIDIA / Intel GPUs.
@@ -24,6 +25,26 @@ anti-aliasing (no upscaling): the game renders at your resolution, FSR 4 removes
   which makes textures and lights shimmer. They are rewritten in memory when the game creates them. Game files
   are not modified.
 - Rain splashes drawn after FSR so they stay crisp; texture LOD bias adjusted for TAA.
+- **Render resolution (FSR 4 upscaling)**, new in 0.8.0: see below.
+
+## Render resolution (FSR 4 upscaling)
+
+The tab has a **Render resolution** list: **100 %** (native AA, default), **77 %** (Ultra Quality), **67 %**
+(Quality), **58 %** (Balanced) and **50 %** (Performance). Below 100 %, the game renders fewer pixels and FSR 4
+upscales the image to your screen resolution; the UI is still drawn at full resolution. The change applies
+immediately (through the engine's own `scale set ScreenPercentage` command) and the game saves it in
+`BmSystemSettings.ini`.
+
+The game's own `ScreenPercentage` is broken in this PC port (post-processing assumes a centred view while the scene
+is drawn in a corner of the buffer: seams, offset image, wrong colours); the add-on corrects the post-processing
+constants when the render resolution is reduced.
+
+Whether it helps depends on your machine: FSR 4's cost depends on the **output** resolution, so you only gain what
+the game saves by rendering fewer pixels. On a Steam Deck (800p, Lite model) the measured gain is nil: the game is
+not limited by pixels there. It should help more on GPU-limited setups such as a 1080p handheld or a desktop GPU at
+high resolution (not measured yet). Current limits: moving objects use camera motion only (slight trails on fast
+characters), and FSR works on the tone-mapped image. If the game's final upscale target does not match (e.g. an
+HDR back buffer), upscaling is disabled for the session and the game upscales by itself.
 
 ## Platform support
 
@@ -96,7 +117,7 @@ Branches: `main` is the release build; `dev` builds the same sources with develo
 
 ## Known limitations
 
-- The game's `ScreenPercentage` setting breaks the image (game bug); this add-on does not upscale.
+- FSR 4 upscaling (render resolution below 100 %) is new and only tested on a Steam Deck; see its limits above.
 - Falling rain streaks go through FSR and can look slightly softer.
 - Sub-pixel details can still flicker a little in motion.
 
