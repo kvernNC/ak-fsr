@@ -236,6 +236,7 @@ void next_test_profile() {
 //   jitter 0|1, patches 0|1, objects 0|1  jitter, shaders corrigés (M6), vélocité des objets (M5)
 //   look <dx> <dy> <frames>  déplace la souris de (dx, dy) à chaque frame pendant <frames> frames (caméra)
 //   compare <hash> …  pour chaque PS : capture <hash>_on, masquage, capture <hash>_off à la frame suivante
+//   upscale 0|1       M9 : FSR 4 en upscaling (agrandissement du moteur remplacé) quand ScreenPercentage < 100
 //   ue3 <commande>    commande du moteur exécutée sur le thread de jeu (ex. ue3 scale set ScreenPercentage 67,
 //                     ue3 scale dump) ; réponses du moteur dans ReShade.log (« [ue3] moteur : … »)
 //   texshot <cs> <t0..t7|u0|u1|handle> <nom> [after]  texture copiée avant le dispatch du CS <cs> (hexadécimal), ou à
@@ -357,6 +358,10 @@ void run_command(reshade::api::effect_runtime *runtime, const std::string &line)
   } else if (cmd == "offset") {  // diagnostic : jitter figé sur un décalage « x y » en pixels
     float x = 0, y = 0;
     if (std::sscanf(arg.c_str(), "%f %f", &x, &y) == 2) akfsr::jitter::force_offset(x, y);
+  } else if (cmd == "upscale") {  // M9 : FSR 4 en upscaling quand le jeu rend en résolution réduite : 0 / 1
+    auto s = akfsr::insertion::get_fsr_settings();
+    s.upscale = std::atoi(arg.c_str()) != 0;
+    akfsr::insertion::set_fsr_settings(s);
   } else if (cmd == "watermark") {  // watermark du pilote FSR 4 : 0 / 1
     auto s = akfsr::insertion::get_fsr_settings();
     s.fsr4_watermark = std::atoi(arg.c_str()) != 0;

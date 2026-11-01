@@ -60,6 +60,7 @@ void save_settings() {
   reshade::set_config_value(nullptr, kSection, "ExposureMode", s.exposure_mode);
   reshade::set_config_value(nullptr, kSection, "ExposureScale", s.exposure_scale);
   reshade::set_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
+  reshade::set_config_value(nullptr, kSection, "Upscale", s.upscale);
 }
 
 void load_settings() {
@@ -90,6 +91,7 @@ void load_settings() {
   reshade::get_config_value(nullptr, kSection, "ExposureExperimental", s.exposure_experimental);
   lod_bias::configure(s.lod_bias, g_mode.load() == mode::fsr);
   reshade::get_config_value(nullptr, kSection, "HighlightThreshold", s.highlight_threshold);
+  reshade::get_config_value(nullptr, kSection, "Upscale", s.upscale);
   {
     std::lock_guard lock(g_settings_mutex);
     g_fsr_settings = s;
@@ -128,6 +130,8 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
 
   auto *color = reinterpret_cast<ID3D11Resource *>(scene_color.handle);
   jitter::set_enabled(m == mode::fsr && get_fsr_settings().jitter);
+  // M9 : en résolution réduite avec l'upscaling, FSR tourne plus tard (agrandissement du moteur) : rien ici.
+  if (m == mode::fsr && upscale_active() && passes::render_scaled()) return false;
   if (m == mode::fsr) {
     if (depth.handle == 0 || view_cb == nullptr) return false;
     fsr::frame_inputs in;
@@ -176,6 +180,28 @@ bool before_post_pass(command_list *cmd, resource scene_color, resource depth, r
 }
 
 bool fsr_active() { return !g_bypass.load(std::memory_order_relaxed) && g_mode.load(std::memory_order_relaxed) == mode::fsr; }
+
+bool upscale_active() { return fsr_active() && get_fsr_settings().upscale; }
+
+bool before_upscale(command_list *cmd, resource color, resource depth, resource velocity, const fsr::view_data *view_cb,
+                    uint32_t render_w, uint32_t render_h) {
+  if (!upscale_active() || color.handle == 0 || depth.handle == 0 || view_cb == nullptr) return false;
+  if (!vk::init(reinterpret_cast<ID3D11Device *>(cmd->get_device()->get_native()))) return false;
+  jitter::set_enabled(get_fsr_settings().jitter);
+  fsr::frame_inputs in;
+  in.color = reinterpret_cast<ID3D11Resource *>(color.handle);
+  in.depth = reinterpret_cast<ID3D11Resource *>(depth.handle);
+  in.velocity = reinterpret_cast<ID3D11Resource *>(velocity.handle);
+  in.view = *view_cb;
+  in.render_width = render_w;
+  in.render_height = render_h;
+  auto *imm = reinterpret_cast<ID3D11DeviceContext *>(cmd->get_native());
+  perf::note_insertion(false);
+  perf::d3d_mark(imm, perf::mark::block_start);
+  const bool ok = fsr::run(in, get_fsr_settings());
+  perf::d3d_mark(imm, perf::mark::block_end);
+  return ok;
+}
 
 mode get_mode() { return g_mode.load(); }
 void set_mode(mode m) {

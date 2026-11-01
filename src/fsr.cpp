@@ -44,9 +44,11 @@ struct state {
   bool ctx_exposure = false;  // M8.5 : contexte utilisé avec une texture d'exposition
   int ctx_fsr4_model = 0;     // modèle FSR 4 imposé au pilote à la création du contexte
   bool ctx_watermark = false;
+  bool ctx_hdr = true;  // M9 : entrée HDR (flottante) ou LDR (après tonemap)
   bool images_exposure = false;  // M8.5 : images créées pour une frame avec exposition
   DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
-  uint32_t width = 0, height = 0;
+  uint32_t width = 0, height = 0;              // sortie (taille des textures du jeu)
+  uint32_t render_w = 0, render_h = 0;         // M9 : zone de rendu (= sortie en AA natif)
   image color_in, color_out, depth_src, velocity_src, depth, motion, exposure;
 } g;
 
@@ -188,6 +190,7 @@ void destroy_frame_resources() {
   destroy_image(g.motion);
   g.format = DXGI_FORMAT_UNKNOWN;
   g.width = g.height = 0;
+  g.render_w = g.render_h = 0;
 }
 
 void destroy_all() {
@@ -212,9 +215,10 @@ const char *device_name() {
 
 // `exposure` : M8.5 actif. Toute bascule reconstruit tout (images, contexte), comme un changement de taille :
 // garder les images en ne recréant que le contexte plante encore (double free dans le pilote, constaté en jeu).
-bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exposure) {
+bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exposure, uint32_t render_w,
+                   uint32_t render_h) {
   if (g.color_in.handle != VK_NULL_HANDLE && g.format == format && g.width == width && g.height == height &&
-      g.images_exposure == exposure)
+      g.images_exposure == exposure && g.render_w == render_w && g.render_h == render_h)
     return true;
   if (g.color_in.handle != VK_NULL_HANDLE && g.images_exposure != exposure)
     reshade::log::message(reshade::log::level::info,
@@ -225,9 +229,9 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
     hooked = true;
     add_shutdown_hook(destroy_all);
   }
-  perf::event("ressources FSR %s : %ux%u, format DXGI %d (avant : %ux%u, format %d)",
-              g.color_in.handle != VK_NULL_HANDLE ? "recréées" : "créées", width, height, static_cast<int>(format),
-              g.width, g.height, static_cast<int>(g.format));
+  perf::event("ressources FSR %s : %ux%u (rendu %ux%u), format DXGI %d (avant : %ux%u, format %d)",
+              g.color_in.handle != VK_NULL_HANDLE ? "recréées" : "créées", width, height, render_w, render_h,
+              static_cast<int>(format), g.width, g.height, static_cast<int>(g.format));
   if (g.color_in.handle != VK_NULL_HANDLE) wait_idle();
   destroy_frame_resources();
 
@@ -237,12 +241,14 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
     return false;
   }
   constexpr VkImageUsageFlags kStorage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  if (!create_shared_image(g.color_in, format, width, height, 0) ||
+  // Couleur d'entrée : zone de rendu seulement (copie avec boîte) ; profondeur et vélocité du jeu : textures entières
+  // (copie de ressource depth/stencil sans boîte), lues par la préparation aux mêmes coordonnées de pixel.
+  if (!create_shared_image(g.color_in, format, render_w, render_h, 0) ||
       !create_shared_image(g.color_out, format, width, height, VK_IMAGE_USAGE_STORAGE_BIT) ||
       !create_shared_image(g.depth_src, DXGI_FORMAT_R32G8X24_TYPELESS, width, height, 0) ||
       !create_shared_image(g.velocity_src, DXGI_FORMAT_R16G16_FLOAT, width, height, 0) ||
-      !create_private_image(g.depth, VK_FORMAT_R32_SFLOAT, width, height, kStorage) ||
-      !create_private_image(g.motion, VK_FORMAT_R16G16_SFLOAT, width, height, kStorage)) {
+      !create_private_image(g.depth, VK_FORMAT_R32_SFLOAT, render_w, render_h, kStorage) ||
+      !create_private_image(g.motion, VK_FORMAT_R16G16_SFLOAT, render_w, render_h, kStorage)) {
     set_fsr_status("création des images : " + vk::status(), true);
     destroy_frame_resources();
     return false;
@@ -272,7 +278,13 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
   g.format = format;
   g.width = width;
   g.height = height;
+  g.render_w = render_w;
+  g.render_h = render_h;
   return true;
+}
+
+bool is_float_format(DXGI_FORMAT f) {
+  return f == DXGI_FORMAT_R11G11B10_FLOAT || f == DXGI_FORMAT_R16G16B16A16_FLOAT || f == DXGI_FORMAT_R32G32B32A32_FLOAT;
 }
 
 // Contexte FSR 4 du pilote : recréé si l'auto-exposition, les vecteurs du jeu, le modèle imposé ou le watermark
@@ -281,7 +293,8 @@ bool ensure_images(DXGI_FORMAT format, uint32_t width, uint32_t height, bool exp
 // FidelityFX (double free dans le pilote, constaté en jeu) : contexte recréé à chaque changement.
 bool ensure_context(const settings &s, bool exposure) {
   if (g.context != nullptr && g.ctx_auto_exposure == s.auto_exposure && g.ctx_game_mv == s.game_mv &&
-      g.ctx_exposure == exposure && g.ctx_fsr4_model == s.fsr4_model && g.ctx_watermark == s.fsr4_watermark)
+      g.ctx_exposure == exposure && g.ctx_fsr4_model == s.fsr4_model && g.ctx_watermark == s.fsr4_watermark &&
+      g.ctx_hdr == is_float_format(g.format))
     return true;
   if (g.context != nullptr) {
     wait_idle();
@@ -290,7 +303,8 @@ bool ensure_context(const settings &s, bool exposure) {
 
   ffxCreateContextDescUpscale desc{};
   desc.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_UPSCALE;
-  desc.flags = FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE | FFX_UPSCALE_ENABLE_DEPTH_INFINITE |
+  // M9 : en upscaling, l'entrée est l'image après tonemap (LDR) : pas de mode HDR.
+  desc.flags = (is_float_format(g.format) ? FFX_UPSCALE_ENABLE_HIGH_DYNAMIC_RANGE : 0u) | FFX_UPSCALE_ENABLE_DEPTH_INFINITE |
                (s.auto_exposure ? FFX_UPSCALE_ENABLE_AUTO_EXPOSURE : 0u) |
                (s.game_mv ? FFX_UPSCALE_ENABLE_MOTION_VECTORS_JITTER_CANCELLATION : 0u);
   desc.maxRenderSize = {g.width, g.height};
@@ -320,6 +334,7 @@ bool ensure_context(const settings &s, bool exposure) {
   g.ctx_exposure = exposure;
   g.ctx_fsr4_model = s.fsr4_model;
   g.ctx_watermark = s.fsr4_watermark;
+  g.ctx_hdr = is_float_format(g.format);
   h.last_run_ms = 0;  // historique neuf : reset à la prochaine frame
 
   static const char *kForced[] = {"", "FP8", "INT8", "INT8-2", "INT8 Lite"};
@@ -546,10 +561,13 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   frame_params p;
   if (!ready()) return false;
   if (!create_pipeline()) return false;
-  if (!ensure_images(desc.Format, desc.Width, desc.Height, in.exposure != nullptr)) return false;
+  const bool scaled = in.render_width != 0 && in.render_height != 0 &&
+                      (in.render_width < desc.Width || in.render_height < desc.Height);
+  const uint32_t render_w = scaled ? in.render_width : desc.Width, render_h = scaled ? in.render_height : desc.Height;
+  if (!ensure_images(desc.Format, desc.Width, desc.Height, in.exposure != nullptr, render_w, render_h)) return false;
   const bool use_exposure = in.exposure != nullptr && g.exposure.handle != VK_NULL_HANDLE;
   if (!ensure_context(s, use_exposure)) return false;
-  compute_params(in, s, g.width, g.height, p);
+  compute_params(in, s, g.render_w, g.render_h, p);
   const double t0 = p.start_ms;
   const push_constants &pc = p.pc;
   const bool objects = p.objects;
@@ -559,7 +577,12 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   ID3D11DeviceContext *imm = ctx().immediate;
   if (now_ms() - g_overlay_seen_ms.load(std::memory_order_relaxed) < 1000.0) g_total_timer.begin(ctx().d3d, imm);
   perf::d3d_mark(imm, perf::mark::copy_in_start);
-  imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
+  if (scaled) {
+    const D3D11_BOX box{0, 0, 0, g.render_w, g.render_h, 1};
+    imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, &box);
+  } else {
+    imm->CopySubresourceRegion(g.color_in.texture, 0, 0, 0, 0, in.color, 0, nullptr);
+  }
   imm->CopySubresourceRegion(g.depth_src.texture, 0, 0, 0, 0, in.depth, 0, nullptr);
   if (objects) imm->CopySubresourceRegion(g.velocity_src.texture, 0, 0, 0, 0, in.velocity, 0, nullptr);
   if (use_exposure) imm->CopySubresourceRegion(g.exposure.texture, 0, 0, 0, 0, in.exposure, 0, nullptr);
@@ -588,7 +611,7 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   fn.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g.pipeline);
   fn.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, g.layout, 0, 1, &g.set, 0, nullptr);
   fn.vkCmdPushConstants(cmd, g.layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(pc), &pc);
-  fn.vkCmdDispatch(cmd, (g.width + 7) / 8, (g.height + 7) / 8, 1);
+  fn.vkCmdDispatch(cmd, (g.render_w + 7) / 8, (g.render_h + 7) / 8, 1);
   VkImageMemoryBarrier to_read[3] = {
       barrier(g.depth, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT,
               VK_ACCESS_SHADER_READ_BIT),
@@ -614,7 +637,7 @@ static bool run_frame(const frame_inputs &in, const settings &s) {
   d.output = ffx_resource(g.color_out, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
   d.jitterOffset = {p.jitter_px_x, p.jitter_px_y};
   d.motionVectorScale = {p.mv_scale_x, p.mv_scale_y};
-  d.renderSize = {g.width, g.height};
+  d.renderSize = {g.render_w, g.render_h};
   d.upscaleSize = {g.width, g.height};
   d.enableSharpening = s.sharpness > 0.0f;
   d.sharpness = s.sharpness;
